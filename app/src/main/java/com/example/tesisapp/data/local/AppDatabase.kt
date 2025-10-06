@@ -8,14 +8,17 @@ import com.example.tesisapp.data.local.entity.ProductEntity
 import com.example.tesisapp.data.local.entity.UserEntity
 import com.example.tesisapp.data.local.entity.LocationEntity
 import com.example.tesisapp.data.local.dao.LocationDao
+import com.example.tesisapp.data.local.dao.TaskDao
+import com.example.tesisapp.data.local.entity.TaskEntity
 
 @Database(
-    entities = [UserEntity::class, ProductEntity::class, LocationEntity::class], // <-- AÑADIR ProductEntity
-    version = 4, // <-- INCREMENTAR VERSIÓN A 2
+    entities = [UserEntity::class, ProductEntity::class, LocationEntity::class, TaskEntity::class],
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
-    abstract fun productDao(): ProductDao // <-- AÑADIR METODO
+    abstract fun productDao(): ProductDao
     abstract fun locationDao(): LocationDao
+    abstract fun taskDao(): TaskDao
 }

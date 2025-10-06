@@ -12,6 +12,9 @@ import com.example.tesisapp.domain.repository.UserRepository
 import com.example.tesisapp.data.local.dao.LocationDao
 import com.example.tesisapp.data.repository.LocationRepositoryImpl
 import com.example.tesisapp.domain.repository.LocationRepository
+import com.example.tesisapp.data.local.dao.TaskDao
+import com.example.tesisapp.data.repository.TaskRepositoryImpl
+import com.example.tesisapp.domain.repository.TaskRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -53,6 +56,12 @@ object AppModule {
     fun provideLocationDao(appDatabase: AppDatabase): LocationDao {
         return appDatabase.locationDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideTaskDao(appDatabase: AppDatabase): TaskDao {
+        return appDatabase.taskDao()
+    }
 }
 
 // Un módulo aparte para los bindings de las interfaces
@@ -77,4 +86,10 @@ abstract class RepositoryModule {
     abstract fun bindLocationRepository(
         locationRepositoryImpl: LocationRepositoryImpl
     ): LocationRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTaskRepository(
+        taskRepositoryImpl: TaskRepositoryImpl
+    ): TaskRepository
 }
