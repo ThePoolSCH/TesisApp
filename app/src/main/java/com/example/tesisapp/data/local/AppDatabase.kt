@@ -14,7 +14,7 @@ import com.example.tesisapp.data.local.entity.TaskEntity
 
 @Database(
     entities = [UserEntity::class, ProductEntity::class, LocationEntity::class, TaskEntity::class, RouteEntity::class, StopEntity::class],
-    version = 16,
+    version = 17,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

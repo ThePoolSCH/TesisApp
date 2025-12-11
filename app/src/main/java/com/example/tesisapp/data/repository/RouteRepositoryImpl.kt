@@ -84,6 +84,7 @@ class RouteRepositoryImpl @Inject constructor(
                 Result.failure(Exception("Error en API o No hay ruta"))
             }
         } catch (e: Exception) {
+            e.printStackTrace()
             Result.failure(e)
         }
     }

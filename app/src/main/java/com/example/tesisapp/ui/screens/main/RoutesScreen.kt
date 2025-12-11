@@ -140,8 +140,9 @@ fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Storefront,
@@ -151,14 +152,15 @@ fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Ubicaciones por Visitar",
-                                style = MaterialTheme.typography.titleLarge
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
 
                         if (uiState.isLoading) {
                             Box(
-                                modifier = Modifier.fillMaxWidth().height(100.dp),
+                                modifier = Modifier.fillMaxWidth().height(40.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 CircularProgressIndicator()
@@ -166,7 +168,7 @@ fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
                         } else if (uiState.locations.isEmpty()) {
                             Text("No hay clientes en la lista.", style = MaterialTheme.typography.bodyMedium)
                         } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 uiState.locations.forEachIndexed { index, location ->
                                     LocationCard(location = location, index = index)
                                 }
@@ -193,8 +195,8 @@ fun RouteMapHeader(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -206,15 +208,15 @@ fun RouteMapHeader(
                     Text(
                         text = routeName,
                         style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = routeDate,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
                 }
-                Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(32.dp))
+                Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
             }
 
             Spacer(modifier = Modifier.height(12.dp))

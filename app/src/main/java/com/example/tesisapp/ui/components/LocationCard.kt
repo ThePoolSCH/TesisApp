@@ -27,20 +27,20 @@ fun LocationCard(location: Location, index: Int) {
     val textColor = Color(0xFF5D4037)
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = cardColor),
         border = BorderStroke(1.dp, borderColor)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.wrapContentHeight().padding(horizontal = 12.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Círculo con el número
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(28.dp)
                     .background(numberColor, CircleShape)
             ) {
                 Text(
@@ -50,19 +50,24 @@ fun LocationCard(location: Location, index: Int) {
                     fontSize = 16.sp
                 )
             }
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             // Columna con nombre y dirección
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f).wrapContentHeight(),
+                verticalArrangement = Arrangement.Center
+            ) {
                 Text(
                     text = location.name,
                     fontWeight = FontWeight.Bold,
                     color = textColor,
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1
                 )
                 Text(
                     text = location.address,
                     color = textColor.copy(alpha = 0.8f),
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
@@ -84,13 +89,13 @@ fun StatusChip(status: String) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = backgroundColor,
-        border = BorderStroke(1.dp, textColor.copy(alpha = 0.5f))
+        border = BorderStroke(1.dp, textColor.copy(alpha = 0.4f))
     ) {
         Text(
             text = status,
             color = textColor,
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
         )
     }
 }

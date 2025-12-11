@@ -52,7 +52,7 @@ class RoutesViewModel @Inject constructor(
                                 "skipped" -> "No visitada"
                                 else -> "Pendiente" // 'pending'
                             },
-                            // Asumiendo que Location tiene lat/lon, si no, agrégalos a tu data class
+                               // Asumiendo que Location tiene lat/lon, si no, agrégalos a tu data class
                             latitude = stop.latitude,
                             longitude = stop.longitude
                         )
