@@ -8,4 +8,5 @@ interface TaskRepository {
      * Obtiene un Flow con la lista de tareas para una ubicación específica.
      */
     fun getTasksForLocation(locationId: Int): Flow<List<Task>>
+    suspend fun updateTaskStatus(taskId: Int, newStatus: String)
 }

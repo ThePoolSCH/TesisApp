@@ -1,8 +1,8 @@
 package com.example.tesisapp.domain.model
 
 data class User(
-    val id: String,
+    val id: Int,
     val name: String,
-    val email: String,
-    val token: String
+    val username: String,
+    val sessionId: String // Importante para futuras peticiones a Odoo
 )

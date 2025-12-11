@@ -12,68 +12,105 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.example.tesisapp.domain.repository.RouteRepository    // El NUEVO repo
+import com.example.tesisapp.domain.model.Route    // El modelo de Odoo
+
 
 data class RoutesUiState(
     val isLoading: Boolean = true,
     val locations: List<Location> = emptyList(),
-    // Rastrea la ubicación que está actualmente "En visita"
     val activeVisitLocation: Location? = null,
-    // Controla la visibilidad del diálogo de finalización
-    val showFinishDialog: Boolean = false
+    val showFinishDialog: Boolean = false,
+    val routeInfo: Route? = null, // Para mostrar nombre, fecha y geometría en el mapa
+    val isSyncing: Boolean = false,
+    val syncMessage: String? = null
 )
 
 @HiltViewModel
 class RoutesViewModel @Inject constructor(
-    private val locationRepository: LocationRepository
+    private val locationRepository: LocationRepository, // Mantenemos tu repo antiguo si lo usas para lógica local
+    private val routeRepository: RouteRepository        // Inyectamos el nuevo repo de Odoo
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RoutesUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
+        // 1. Observar la Ruta Local (Base de datos Room alimentada por Odoo)
         viewModelScope.launch {
-            locationRepository.seedLocationsIfEmpty()
-
-            locationRepository.getLocations().map { locations ->
-                locations.sortedWith(compareBy {
-                    when (it.status) {
-                        "En visita" -> 0
-                        "Pendiente" -> 1
-                        else -> 2
+            routeRepository.getTodayRoute().collect { odooRoute ->
+                if (odooRoute != null) {
+                    // CONVERTIR datos de Odoo -> Tus datos de UI (Location)
+                    val mappedLocations = odooRoute.stops.map { stop ->
+                        Location(
+                            id = stop.id,
+                            name = stop.partnerName,
+                            address = stop.address,
+                            // Mapeo de estados de Odoo a tus estados de UI
+                            status = when (stop.visitState) {
+                                "arrived" -> "Visitada"
+                                "skipped" -> "No visitada"
+                                else -> "Pendiente" // 'pending'
+                            },
+                            // Asumiendo que Location tiene lat/lon, si no, agrégalos a tu data class
+                            latitude = stop.latitude,
+                            longitude = stop.longitude
+                        )
                     }
-                })
-            }.collect { sortedLocations ->
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        locations = sortedLocations,
-                        // Busca si hay una visita activa y la guarda en el estado
-                        activeVisitLocation = sortedLocations.firstOrNull { loc -> loc.status == "En visita" }
-                    )
+
+                    _uiState.update { currentState ->
+                        currentState.copy(
+                            isLoading = false,
+                            routeInfo = odooRoute, // Guardamos la info de la ruta (geometría, fecha)
+                            locations = mappedLocations,
+                            // Recalcular visita activa basado en los nuevos datos
+                            activeVisitLocation = mappedLocations.firstOrNull { it.status == "En visita" }
+                        )
+                    }
+                } else {
+                    // Si no hay ruta de Odoo, podrías cargar tus datos mock antiguos aquí
+                    // loadMockLocations()
                 }
             }
         }
     }
 
-    /**
-     * Maneja el clic en el botón principal.
-     * Si no hay visita activa, inicia una.
-     * Si hay una visita activa, muestra el diálogo para terminarla.
-     */
+    // --- NUEVA FUNCIÓN: Sincronizar con Odoo ---
+    fun onSyncPressed() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncing = true) }
+
+            val result = routeRepository.syncRoute()
+
+            _uiState.update {
+                it.copy(
+                    isSyncing = false,
+                    syncMessage = if (result.isSuccess) "Ruta actualizada" else "Error al sincronizar"
+                )
+            }
+        }
+    }
+
+    fun clearSyncMessage() {
+        _uiState.update { it.copy(syncMessage = null) }
+    }
+
+    // --- TUS FUNCIONES EXISTENTES (Ligeramente adaptadas) ---
+
     fun onMainButtonClick() {
         if (_uiState.value.activeVisitLocation == null) {
             // Iniciar visita
             viewModelScope.launch {
+                // Aquí deberías actualizar el estado en la BD local también si quieres persistencia real
                 val pendingLocation = _uiState.value.locations
-                    .filter { it.status == "Pendiente" }
-                    .randomOrNull()
+                    .firstOrNull { it.status == "Pendiente" } // Tomamos el primero en orden, no random
 
-                pendingLocation?.let {
-                    locationRepository.updateLocationStatus(it.id, "En visita")
+                if (pendingLocation != null) {
+                    // Actualizamos el estado en memoria (y en UI)
+                    updateLocationStatusLocal(pendingLocation.id, "En visita")
                 }
             }
         } else {
-            // Mostrar diálogo para terminar visita
             _uiState.update { it.copy(showFinishDialog = true) }
         }
     }
@@ -82,25 +119,31 @@ class RoutesViewModel @Inject constructor(
         _uiState.update { it.copy(showFinishDialog = false) }
     }
 
-    /**
-     * Confirma la finalización de la visita, cambiando el estado a "Visitada".
-     */
     fun onConfirmFinishVisit() {
         viewModelScope.launch {
             _uiState.value.activeVisitLocation?.let {
-                locationRepository.updateLocationStatus(it.id, "Visitada")
+                updateLocationStatusLocal(it.id, "Visitada")
+                // TODO: Aquí podrías mandar una petición a Odoo para marcar "arrived" en el servidor
             }
-            // Ocultamos el diálogo después de confirmar
             onDismissFinishDialog()
         }
     }
 
-    /**
-     * Placeholder para la lógica de reportar incidente.
-     */
     fun onReportIncident() {
-        // Aquí iría la lógica para navegar a una pantalla de reporte, etc.
-        println("DEBUG: Incidente reportado para la ubicación ${_uiState.value.activeVisitLocation?.name}")
+        println("DEBUG: Incidente reportado")
         onDismissFinishDialog()
+    }
+
+    // Helper para actualizar la lista localmente sin recargar todo
+    private fun updateLocationStatusLocal(id: Int, newStatus: String) {
+        val updatedList = _uiState.value.locations.map { loc ->
+            if (loc.id == id) loc.copy(status = newStatus) else loc
+        }
+        _uiState.update {
+            it.copy(
+                locations = updatedList,
+                activeVisitLocation = updatedList.firstOrNull { l -> l.status == "En visita" }
+            )
+        }
     }
 }

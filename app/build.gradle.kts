@@ -80,5 +80,14 @@ dependencies {
     implementation(libs.retrofit.retrofit)
     implementation(libs.retrofit.converter.gson)
 
+    // Implementación de OkHttp usando el catálogo
+    implementation(platform(libs.okhttp.bom)) // Sincroniza versiones
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging.interceptor) // Soluciona error 'logging'
+    implementation(libs.okhttp.urlconnection)     // Soluciona error 'JavaNetCookieJar'
+
+    implementation(libs.osmdroid.android)
+    implementation(libs.androidx.preference)
+
     implementation("androidx.compose.material:material-icons-extended:1.6.8")
 }

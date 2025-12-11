@@ -29,4 +29,7 @@ interface TaskDao {
      */
     @Query("SELECT COUNT(*) FROM tasks_table")
     suspend fun count(): Int
+
+    @Query("UPDATE tasks_table SET status = :newStatus WHERE id = :taskId")
+    suspend fun updateTaskStatus(taskId: Int, newStatus: String)
 }

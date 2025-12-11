@@ -3,69 +3,67 @@ package com.example.tesisapp.ui.screens.login
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun LoginScreen(
-    onLoginSuccess: () -> Unit,
-    viewModel: LoginViewModel = hiltViewModel()
+    viewModel: LoginViewModel = hiltViewModel(),
+    onLoginSuccess: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val state = viewModel.state.value
+    var dbName by remember { mutableStateOf("odoo") } // Nombre exacto de tu BD Odoo
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
 
-    var email by remember { mutableStateOf("test@example.com") }
-    var password by remember { mutableStateOf("123456") }
-
-    LaunchedEffect(uiState.loginSuccess) {
-        if (uiState.loginSuccess) {
+    // Efecto secundario si el login es exitoso
+    LaunchedEffect(state.success) {
+        if (state.success) {
             onLoginSuccess()
         }
     }
 
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.Center
     ) {
-        if (uiState.isLoading) {
+        TextField(
+            value = dbName,
+            onValueChange = { dbName = it },
+            label = { Text("Base de datos") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        TextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Email / Usuario") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        TextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Contraseña") },
+            modifier = Modifier.fillMaxWidth(),
+            // visualTransformation = PasswordVisualTransformation() // Agrega esto
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (state.isLoading) {
             CircularProgressIndicator()
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Button(
+                onClick = { viewModel.onLogin(dbName, email, password) },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Login", style = MaterialTheme.typography.headlineMedium)
-
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Contraseña") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Button(
-                    onClick = { viewModel.login(email, password) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Iniciar Sesión")
-                }
-
-                uiState.error?.let {
-                    Text(text = it, color = MaterialTheme.colorScheme.error)
-                }
+                Text("Ingresar")
             }
+        }
+
+        state.error?.let { error ->
+            Text(text = error, color = MaterialTheme.colorScheme.error)
         }
     }
 }

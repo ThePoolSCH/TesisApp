@@ -50,6 +50,10 @@ class TaskRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun updateTaskStatus(taskId: Int, newStatus: String) { // <-- NUEVO
+        taskDao.updateTaskStatus(taskId, newStatus)
+    }
+
     // --- DATOS HARDCODEADOS ---
     private fun getHardcodedTasks(): List<TaskEntity> {
         return listOf(
@@ -62,7 +66,15 @@ class TaskRepositoryImpl @Inject constructor(
             TaskEntity(locationId = 2, name = "Revisar Precios", description = "Verificar que los precios de nuestros productos clave estén correctos.", priority = "Media", status = "Pendiente", requiresEvidence = false, requiresAnnotation = false),
 
             // Tareas para "Minimarket El Sol" (locationId = 3)
-            TaskEntity(locationId = 3, name = "Actualizar Material POP", description = "Colocar los nuevos afiches promocionales en la entrada.", priority = "Baja", status = "Pendiente", requiresEvidence = true, requiresAnnotation = true)
+            TaskEntity(locationId = 3, name = "Actualizar Material POP", description = "Colocar los nuevos afiches promocionales en la entrada.", priority = "Baja", status = "Pendiente", requiresEvidence = true, requiresAnnotation = true),
+            TaskEntity(locationId = 3, name = "Proponer Productos Nuevos", description = "Sugerir al menos 2 productos nuevos para el local y tomar nota de la respuesta del encargado.", priority = "Alta", status = "Pendiente", requiresEvidence = false, requiresAnnotation = true),
+            TaskEntity(locationId = 4, name = "Revisar Precios", description = "Verificar que los precios de nuestros productos clave estén correctos.", priority = "Media", status = "Pendiente", requiresEvidence = false, requiresAnnotation = false),
+            TaskEntity(locationId = 5, name = "Proponer Productos Nuevos", description = "Sugerir al menos 2 productos nuevos para el local y tomar nota de la respuesta del encargado.", priority = "Alta", status = "Pendiente", requiresEvidence = false, requiresAnnotation = true),
+            TaskEntity(locationId = 5, name = "Revisar Precios", description = "Verificar que los precios de nuestros productos clave estén correctos.", priority = "Media", status = "Pendiente", requiresEvidence = false, requiresAnnotation = false),
+            TaskEntity(locationId = 5, name = "Proponer Productos Nuevos", description = "Sugerir al menos 2 productos nuevos para el local y tomar nota de la respuesta del encargado.", priority = "Alta", status = "Pendiente", requiresEvidence = false, requiresAnnotation = true),
+            TaskEntity(locationId = 6, name = "Revisar Precios", description = "Verificar que los precios de nuestros productos clave estén correctos.", priority = "Media", status = "Pendiente", requiresEvidence = false, requiresAnnotation = false),
+            TaskEntity(locationId = 6, name = "Proponer Productos Nuevos", description = "Sugerir al menos 2 productos nuevos para el local y tomar nota de la respuesta del encargado.", priority = "Alta", status = "Pendiente", requiresEvidence = false, requiresAnnotation = true),
+            TaskEntity(locationId = 7, name = "Revisar Precios", description = "Verificar que los precios de nuestros productos clave estén correctos.", priority = "Media", status = "Pendiente", requiresEvidence = false, requiresAnnotation = false),
         )
     }
 }

@@ -11,7 +11,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.tesisapp.ui.navigation.BottomNavItem
 
 @Composable
-fun BottomNavigationBar(navController: NavController, isProductsTabEnabled: Boolean) {
+fun BottomNavigationBar(
+    navController: NavController,
+    isProductsTabEnabled: Boolean
+) {
     val items = listOf(
         BottomNavItem.Routes,
         BottomNavItem.Tasks,
@@ -25,29 +28,37 @@ fun BottomNavigationBar(navController: NavController, isProductsTabEnabled: Bool
 
         items.forEach { item ->
 
-            val isEnabled = if (item is BottomNavItem.Products) {
-                isProductsTabEnabled
-            } else {
-                true // Todos los demás items siempre están habilitados
+            // Lógica actualizada: Habilita tanto Productos como Tareas
+            // solo si hay una visita activa (isProductsTabEnabled es true).
+            // Los demás items (Rutas, Resumen) siempre están habilitados.
+            val isEnabled = when (item) {
+                is BottomNavItem.Products, is BottomNavItem.Tasks -> isProductsTabEnabled
+                else -> true
             }
 
             NavigationBarItem(
+                // Aplicamos el flag de habilitación al componente
                 enabled = isEnabled,
+
+                // El resto de la lógica de selección y apariencia se mantiene
                 selected = currentRoute == item.route,
                 label = { Text(text = item.title) },
                 icon = { Icon(imageVector = item.icon, contentDescription = item.title) },
                 onClick = {
-                    navController.navigate(item.route) {
-                        // Vuelve al inicio del grafo de navegación para evitar acumular pantallas
-                        navController.graph.startDestinationRoute?.let { route ->
-                            popUpTo(route) {
-                                saveState = true
+                    // Importante: Solo ejecutar la navegación si el item está habilitado
+                    if (isEnabled) {
+                        navController.navigate(item.route) {
+                            // Vuelve al inicio del grafo de navegación para evitar acumular pantallas
+                            navController.graph.startDestinationRoute?.let { route ->
+                                popUpTo(route) {
+                                    saveState = true
+                                }
                             }
+                            // Evita lanzar múltiples copias de la misma pantalla
+                            launchSingleTop = true
+                            // Restaura el estado al volver a seleccionar un item
+                            restoreState = true
                         }
-                        // Evita lanzar múltiples copias de la misma pantalla
-                        launchSingleTop = true
-                        // Restaura el estado al volver a seleccionar un item
-                        restoreState = true
                     }
                 }
             )
