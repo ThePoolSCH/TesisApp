@@ -88,4 +88,56 @@ class RouteRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
+    override suspend fun updateLocalStatus(stopId: Int, status: String) {
+        // Llamamos al DAO que ya creamos antes
+        dao.updateStopStatus(stopId, status)
+    }
+
+    override suspend fun startVisit(stopId: Int, lat: Double, lon: Double): Result<Unit> {
+        return try {
+            // 1. Llamada al Servidor Odoo
+            val params = mapOf(
+                "route_line_id" to stopId,
+                "latitude" to lat,
+                "longitude" to lon
+            )
+
+            val response = api.checkInStop(OdooJsonRpcRequest(params = params))
+
+            if (response.isSuccessful && response.body()?.result?.status == "success") {
+                // 2. Si Odoo dice OK, actualizamos Room localmente
+                // Buscamos la parada actual en DB para no perder datos
+                // (Nota: Esto requiere que tengas un método en DAO para actualizar estado, o hacerlo manual)
+
+                // Opción rápida: Actualizar solo el estado en la tabla 'stops'
+                dao.updateStopStatus(stopId, "arrived")
+
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Error en Odoo: ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun finishVisit(stopId: Int): Result<Unit> {
+        return try {
+            val params = mapOf("route_line_id" to stopId)
+            val response = api.checkOutStop(OdooJsonRpcRequest(params = params))
+
+            if (response.isSuccessful && response.body()?.result?.status == "success") {
+                // Actualizamos localmente a "done" (Visitada)
+                dao.updateStopStatus(stopId, "done")
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Error al finalizar visita"))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
 }

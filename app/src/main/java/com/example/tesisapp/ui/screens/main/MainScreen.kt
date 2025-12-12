@@ -24,10 +24,11 @@ fun MainScreen(
     val bottomNavController = rememberNavController()
     val routesViewModel: RoutesViewModel = hiltViewModel()
     val routesUiState by routesViewModel.uiState.collectAsStateWithLifecycle()
-    val isVisitActive = routesUiState.activeVisitLocation != null
+
+    val activeVisitId = routesUiState.activeVisitLocation?.id
+    val isVisitActive = activeVisitId != null
 
     val mainUiState by mainViewModel.uiState.collectAsStateWithLifecycle()
-
 
     Scaffold(
         topBar = {
@@ -40,7 +41,7 @@ fun MainScreen(
         bottomBar = {
             BottomNavigationBar(
                 navController = bottomNavController,
-                isProductsTabEnabled = isVisitActive // <-- NUEVO
+                isProductsTabEnabled = isVisitActive // Esto ya lo tenías, bloquea el click visualmente
             )
         }
     ) { innerPadding ->
@@ -49,9 +50,23 @@ fun MainScreen(
                 navController = bottomNavController,
                 startDestination = BottomNavItem.Routes.route
             ) {
-                composable(BottomNavItem.Routes.route) { RoutesScreen() }
+                composable(BottomNavItem.Routes.route) {
+                    // Como RoutesViewModel es HiltViewModel y está en el scope de MainScreen
+                    // al llamar a RoutesScreen() usará la misma instancia o una nueva
+                    // pero para compartir datos es mejor que RoutesScreen use su propio inject
+                    // (como ya lo tienes hecho).
+                    RoutesScreen()
+                }
+
                 composable(BottomNavItem.Tasks.route) { TasksScreen() }
-                composable(BottomNavItem.Products.route) { ProductsScreen() }
+
+                // 3. PASAMOS EL ID AQUI
+                composable(BottomNavItem.Products.route) {
+                    ProductsScreen(
+                        activeRouteLineId = activeVisitId
+                    )
+                }
+
                 composable(BottomNavItem.Summary.route) { SummaryScreen() }
             }
         }

@@ -21,11 +21,36 @@ import com.example.tesisapp.ui.components.FinishVisitDialog
 import com.example.tesisapp.ui.components.LocationCard
 import com.example.tesisapp.ui.components.LocationValidationCard
 import com.example.tesisapp.ui.components.RouteMap // Importamos nuestro componente de mapa
+import android.annotation.SuppressLint
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import com.google.android.gms.location.LocationServices
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+    val handleMainButtonClick: () -> Unit = {
+        try {
+            // Verificar permisos antes de pedir ubicación (aunque ya deberías tenerlos por el mapa)
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                if (location != null) {
+                    viewModel.onMainButtonClick(location.latitude, location.longitude)
+                } else {
+                    // Si es null (GPS apagado o emulador sin datos), usar 0.0 o mostrar error
+                    // Para pruebas puedes mandar 0.0, pero en prod mostrar un Toast "Active GPS"
+                    viewModel.onMainButtonClick(0.0, 0.0)
+                }
+            }
+        } catch (e: SecurityException) {
+            // Manejar falta de permisos
+        }
+    }
 
     // --- GESTIÓN DE PERMISOS DE UBICACIÓN ---
     var isLocationPermissionGranted by remember { mutableStateOf(false) }
@@ -72,7 +97,7 @@ fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { viewModel.onSyncPressed() },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                containerColor = Color.Black,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             ) {
                 if (uiState.isSyncing) {
@@ -83,9 +108,9 @@ fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Cargando...")
                 } else {
-                    Icon(Icons.Default.Refresh, contentDescription = "Sync")
+                    Icon(Icons.Default.Refresh, contentDescription = "Sync", tint = Color.White)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Sincronizar")
+                    Text("Sincronizar", color = Color.White)
                 }
             }
         }
@@ -103,7 +128,7 @@ fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
             item {
                 if (uiState.routeInfo != null) {
                     RouteMapHeader(
-                        routeName = uiState.routeInfo!!.name,
+                        routeName = "Ruta",
                         routeDate = uiState.routeInfo!!.date,
                         geometry = uiState.routeInfo!!.geometry,
                         stops = uiState.routeInfo!!.stops,
@@ -112,12 +137,16 @@ fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
                 } else {
                     // Estado vacío (sin sincronizar)
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        modifier = Modifier.fillMaxWidth()
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White   // MISMO fondo blanco del otro componente
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        shape = RoundedCornerShape(16.dp),
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text("No hay ruta cargada.", style = MaterialTheme.typography.bodyLarge)
                             Text("Presiona 'Sincronizar' para obtener tus visitas.", style = MaterialTheme.typography.bodySmall)
@@ -129,7 +158,7 @@ fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
             // --- SECCIÓN 1: VALIDAR UBICACIÓN ---
             item {
                 LocationValidationCard(
-                    onButtonClick = viewModel::onMainButtonClick,
+                    onButtonClick = handleMainButtonClick, // <--- USAMOS LA NUEVA FUNCIÓN
                     activeVisitLocation = uiState.activeVisitLocation,
                     hasPendingLocations = uiState.locations.any { it.status == "Pendiente" }
                 )
@@ -140,20 +169,21 @@ fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Storefront,
                                 contentDescription = "Ubicaciones",
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = Color.Black
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Ubicaciones por Visitar",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.Black
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
@@ -195,8 +225,9 @@ fun RouteMapHeader(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -208,15 +239,16 @@ fun RouteMapHeader(
                     Text(
                         text = routeName,
                         style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onSurface
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.Black
                     )
                     Text(
                         text = routeDate,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = Color.Gray
                     )
                 }
-                Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(32.dp), tint = Color.Black)
             }
 
             Spacer(modifier = Modifier.height(12.dp))

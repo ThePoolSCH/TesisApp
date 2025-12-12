@@ -21,10 +21,10 @@ import com.example.tesisapp.domain.model.Location
 
 @Composable
 fun LocationCard(location: Location, index: Int) {
-    val cardColor = Color(0xFFFFF7F0)
-    val borderColor = Color(0xFFF7D5B4)
-    val numberColor = Color(0xFFE57373)
-    val textColor = Color(0xFF5D4037)
+    val cardColor = Color.White
+    val borderColor = Color.Black
+    val numberColor = Color.Black
+    val textColor = Color.Black
 
     Card(
         modifier = Modifier.fillMaxWidth().wrapContentHeight(),

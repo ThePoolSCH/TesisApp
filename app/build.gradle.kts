@@ -89,5 +89,8 @@ dependencies {
     implementation(libs.osmdroid.android)
     implementation(libs.androidx.preference)
 
+    implementation(libs.play.services.location)
+    implementation("io.coil-kt:coil-compose:2.4.0")
+
     implementation("androidx.compose.material:material-icons-extended:1.6.8")
 }

@@ -38,3 +38,6 @@ data class StopDto(
     @SerializedName("visit_state") val visitState: String,
     @SerializedName("total_sold") val totalSold: Double
 )
+
+data class OdooCheckInResponse(val result: CheckInResult?)
+data class CheckInResult(val status: String, val message: String)

@@ -14,4 +14,11 @@ interface OdooApiService {
 
     @POST("/api/rutas/today")
     suspend fun getTodayRoute(@Body body: OdooJsonRpcRequest): Response<OdooRouteResponse>
+
+    @POST("/api/rutas/checkin")
+    suspend fun checkInStop(@Body body: OdooJsonRpcRequest): Response<OdooCheckInResponse>
+
+    // NUEVO
+    @POST("/api/rutas/checkout")
+    suspend fun checkOutStop(@Body body: OdooJsonRpcRequest): Response<OdooCheckInResponse> // Reusamos el DTO de respuesta
 }

@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.example.tesisapp.domain.repository.RouteRepository    // El NUEVO repo
 import com.example.tesisapp.domain.model.Route    // El modelo de Odoo
+import android.location.Location as AndroidLocation // Alias para no confundir con tu modelo
 
 
 data class RoutesUiState(
@@ -28,7 +29,6 @@ data class RoutesUiState(
 
 @HiltViewModel
 class RoutesViewModel @Inject constructor(
-    private val locationRepository: LocationRepository, // Mantenemos tu repo antiguo si lo usas para lógica local
     private val routeRepository: RouteRepository        // Inyectamos el nuevo repo de Odoo
 ) : ViewModel() {
 
@@ -48,9 +48,10 @@ class RoutesViewModel @Inject constructor(
                             address = stop.address,
                             // Mapeo de estados de Odoo a tus estados de UI
                             status = when (stop.visitState) {
-                                "arrived" -> "Visitada"
+                                "arrived" -> "En visita"  // Odoo 'arrived' = App 'En visita'
+                                "done" -> "Visitada"      // Odoo 'done' = App 'Visitada'
                                 "skipped" -> "No visitada"
-                                else -> "Pendiente" // 'pending'
+                                else -> "Pendiente"
                             },
                                // Asumiendo que Location tiene lat/lon, si no, agrégalos a tu data class
                             latitude = stop.latitude,
@@ -97,36 +98,73 @@ class RoutesViewModel @Inject constructor(
 
     // --- TUS FUNCIONES EXISTENTES (Ligeramente adaptadas) ---
 
-    fun onMainButtonClick() {
-        if (_uiState.value.activeVisitLocation == null) {
-            // Iniciar visita
-            viewModelScope.launch {
-                // Aquí deberías actualizar el estado en la BD local también si quieres persistencia real
-                val pendingLocation = _uiState.value.locations
-                    .firstOrNull { it.status == "Pendiente" } // Tomamos el primero en orden, no random
+    fun onMainButtonClick(userLat: Double, userLon: Double) {
+        val currentState = _uiState.value
 
-                if (pendingLocation != null) {
-                    // Actualizamos el estado en memoria (y en UI)
-                    updateLocationStatusLocal(pendingLocation.id, "En visita")
+        // A) INICIAR VISITA
+        if (currentState.activeVisitLocation == null) {
+            viewModelScope.launch {
+                _uiState.update { it.copy(isLoading = true) }
+
+                // 1. Filtrar pendientes
+                val pendingStops = currentState.locations.filter { it.status == "Pendiente" }
+
+                if (pendingStops.isEmpty()) {
+                    _uiState.update { it.copy(isLoading = false) }
+                    return@launch
                 }
+
+                // 2. Calcular más cercano
+                val nearestStop = pendingStops.minByOrNull { stop ->
+                    val stopLoc = AndroidLocation("stop")
+                    stopLoc.latitude = stop.latitude ?: 0.0
+                    stopLoc.longitude = stop.longitude ?: 0.0
+                    val userLoc = AndroidLocation("user")
+                    userLoc.latitude = userLat
+                    userLoc.longitude = userLon
+                    userLoc.distanceTo(stopLoc)
+                }
+
+                // 3. Iniciar (Backend + Local)
+                if (nearestStop != null) {
+                    // Llamamos a Odoo para marcar check-in
+                    val result = routeRepository.startVisit(nearestStop.id, userLat, userLon)
+
+                    if (result.isSuccess) {
+                        // IMPORTANTE: Cambiamos estado a "En visita".
+                        // Esto hace que activeVisitLocation deje de ser null automáticamente
+                        // y se habiliten los tabs en MainScreen.
+                        updateLocationStatusLocal(nearestStop.id, "En visita")
+                    } else {
+                        // Manejo de error
+                    }
+                }
+                _uiState.update { it.copy(isLoading = false) }
             }
-        } else {
+        }
+        // B) FINALIZAR VISITA (Abrir diálogo)
+        else {
             _uiState.update { it.copy(showFinishDialog = true) }
         }
-    }
 
-    fun onDismissFinishDialog() {
-        _uiState.update { it.copy(showFinishDialog = false) }
     }
 
     fun onConfirmFinishVisit() {
         viewModelScope.launch {
-            _uiState.value.activeVisitLocation?.let {
-                updateLocationStatusLocal(it.id, "Visitada")
-                // TODO: Aquí podrías mandar una petición a Odoo para marcar "arrived" en el servidor
+            val activeLocation = _uiState.value.activeVisitLocation
+
+            if (activeLocation != null) {
+                // 1. Actualización visual inmediata
+                updateLocationStatusLocal(activeLocation.id, "Visitada")
+
+                // 2. Llamada al Backend (Checkout)
+                routeRepository.finishVisit(activeLocation.id)
             }
             onDismissFinishDialog()
         }
+    }
+    fun onDismissFinishDialog() {
+        _uiState.update { it.copy(showFinishDialog = false) }
     }
 
     fun onReportIncident() {

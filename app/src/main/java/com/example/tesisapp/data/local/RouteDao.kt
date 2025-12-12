@@ -33,4 +33,7 @@ interface RouteDao {
         insertRoute(route)
         insertStops(stops)
     }
+
+    @Query("UPDATE stops SET visitState = :newState WHERE id = :stopId")
+    suspend fun updateStopStatus(stopId: Int, newState: String)
 }
