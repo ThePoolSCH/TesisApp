@@ -8,11 +8,10 @@ import com.example.tesisapp.data.local.entity.UserEntity
 import com.example.tesisapp.data.local.entity.LocationEntity
 import com.example.tesisapp.data.local.dao.LocationDao
 import com.example.tesisapp.data.local.dao.TaskDao
-import com.example.tesisapp.data.local.entity.TaskEntity
-
+import com.example.tesisapp.data.local.entity.TaskDefinitionEntity
 @Database(
-    entities = [UserEntity::class, ProductEntity::class, LocationEntity::class, TaskEntity::class, RouteEntity::class, StopEntity::class, CampaignEntity::class, CampaignTargetEntity::class],
-    version = 33,
+    entities = [UserEntity::class, ProductEntity::class, LocationEntity::class, TaskDefinitionEntity::class, RouteEntity::class, StopEntity::class, CampaignEntity::class, CampaignTargetEntity::class],
+    version = 45,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

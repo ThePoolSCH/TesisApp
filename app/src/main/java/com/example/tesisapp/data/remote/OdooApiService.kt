@@ -7,6 +7,10 @@ import retrofit2.http.Body
 import retrofit2.http.POST
 import com.example.tesisapp.data.remote.OdooJsonRpcRequest
 import com.example.tesisapp.data.remote.OdooRouteResponse
+import com.example.tesisapp.data.remote.dto.OdooResultWrapper
+import com.example.tesisapp.data.remote.dto.SubmitTaskRequest
+import com.example.tesisapp.data.remote.dto.SubmitTaskResponse
+import com.example.tesisapp.data.remote.dto.TaskDefinitionsResponse
 
 interface OdooApiService {
     @POST("/web/session/authenticate")
@@ -21,4 +25,10 @@ interface OdooApiService {
     // NUEVO
     @POST("/api/rutas/checkout")
     suspend fun checkOutStop(@Body body: OdooJsonRpcRequest): Response<OdooCheckInResponse> // Reusamos el DTO de respuesta
+
+    @POST("/api/tasks/definitions")
+    suspend fun getTaskDefinitions(@Body body: Map<String, String> = emptyMap()): OdooResultWrapper<TaskDefinitionsResponse>
+
+    @POST("/api/tasks/submit")
+    suspend fun submitTasks(@Body request: SubmitTaskRequest): OdooResultWrapper<SubmitTaskResponse>
 }

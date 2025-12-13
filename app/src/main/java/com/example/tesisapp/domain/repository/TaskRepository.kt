@@ -1,12 +1,9 @@
 package com.example.tesisapp.domain.repository
 
-import com.example.tesisapp.domain.model.Task
-import kotlinx.coroutines.flow.Flow
+import com.example.tesisapp.domain.model.TaskDefinition
 
 interface TaskRepository {
-    /**
-     * Obtiene un Flow con la lista de tareas para una ubicación específica.
-     */
-    fun getTasksForLocation(locationId: Int): Flow<List<Task>>
-    suspend fun updateTaskStatus(taskId: Int, newStatus: String)
+    suspend fun getTasks(): Result<List<TaskDefinition>>
+    // Recibe el ID de la visita y un mapa: ID_Pregunta -> Valor (Bool o String)
+    suspend fun submitTasks(routeLineId: Int, answers: Map<Int, Any>): Result<String>
 }

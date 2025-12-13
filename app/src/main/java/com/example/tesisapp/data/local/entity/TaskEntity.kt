@@ -1,34 +1,26 @@
 package com.example.tesisapp.data.local.entity
 
 import androidx.room.Entity
-import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
+import com.example.tesisapp.domain.model.TaskDefinition
+import com.example.tesisapp.domain.model.TaskType
 
-@Entity(
-    tableName = "tasks_table",
-    foreignKeys = [
-        ForeignKey(
-            entity = LocationEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["locationId"],
-            onDelete = ForeignKey.CASCADE // Si se borra una ubicación, se borran sus tareas
+@Entity(tableName = "task_definitions")
+data class TaskDefinitionEntity(
+    @PrimaryKey(autoGenerate = false)
+    val id: Int,
+    val question: String,
+    val type: String, // Guardamos como String: "bool" o "text"
+    val isRequired: Boolean,
+    val sequence: Int // Útil para ordenar
+) {
+    // Mapper de Entidad a Dominio
+    fun toDomain(): TaskDefinition {
+        return TaskDefinition(
+            id = id,
+            question = question,
+            type = if (type == "bool") TaskType.BOOLEAN else TaskType.TEXT,
+            isRequired = isRequired
         )
-    ]
-)
-data class TaskEntity(
-    @PrimaryKey(autoGenerate = true)
-    val id: Int = 0,
-    val locationId: Int, // Clave foránea que la vincula a una ubicación
-    val name: String,
-    val description: String,
-    val priority: String, // "Alta", "Media", "Baja"
-    val status: String, // "Pendiente", "Completada", "Incidente"
-
-    // Campos para gestionar la evidencia y anotaciones
-    val requiresEvidence: Boolean,
-    val requiresAnnotation: Boolean,
-
-    // Campos para guardar los resultados (inicialmente nulos)
-    val evidenceUri: String? = null, // Guardará la URI de la foto/archivo
-    val annotationText: String? = null // Guardará la nota del usuario
-)
+    }
+}

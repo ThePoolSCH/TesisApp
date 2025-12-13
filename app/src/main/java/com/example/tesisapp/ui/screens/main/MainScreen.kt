@@ -58,7 +58,11 @@ fun MainScreen(
                     RoutesScreen()
                 }
 
-                composable(BottomNavItem.Tasks.route) { TasksScreen() }
+                composable(BottomNavItem.Tasks.route) {
+                    TasksScreen(
+                        activeRouteLineId = activeVisitId
+                    )
+                }
 
                 // 3. PASAMOS EL ID AQUI
                 composable(BottomNavItem.Products.route) {

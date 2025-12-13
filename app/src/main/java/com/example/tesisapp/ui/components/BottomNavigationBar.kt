@@ -3,15 +3,17 @@ package com.example.tesisapp.ui.components
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Color
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.tesisapp.ui.navigation.BottomNavItem
 
 @Composable
-fun BottomNavigationBar(
+    fun BottomNavigationBar(
     navController: NavController,
     isProductsTabEnabled: Boolean
 ) {
@@ -44,6 +46,22 @@ fun BottomNavigationBar(
                 selected = currentRoute == item.route,
                 label = { Text(text = item.title) },
                 icon = { Icon(imageVector = item.icon, contentDescription = item.title) },
+                colors = NavigationBarItemDefaults.colors(
+                    // Color de la "píldora" de fondo al estar seleccionado (CAMBIA ESTE COLOR)
+                    indicatorColor = Color.White, // Un Azul Celeste Brillante
+
+                    // Icono y texto cuando está seleccionado
+                    selectedIconColor = Color.Black,
+                    selectedTextColor = Color.Black,
+
+                    // Icono y texto cuando NO está seleccionado
+                    unselectedIconColor = Color.Gray,
+                    unselectedTextColor = Color.Gray,
+
+                    // Colores cuando está deshabilitado (isEnabled = false)
+                    disabledIconColor = Color.LightGray,
+                    disabledTextColor = Color.LightGray
+                ),
                 onClick = {
                     // Importante: Solo ejecutar la navegación si el item está habilitado
                     if (isEnabled) {
