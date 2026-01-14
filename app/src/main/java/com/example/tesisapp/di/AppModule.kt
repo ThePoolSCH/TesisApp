@@ -98,7 +98,7 @@ object AppModule {
     @Singleton
     fun provideRetrofit(client: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("http://192.168.68.171:8069/") // IP Emulador
+            .baseUrl("http://10.0.2.2:8069/") // IP Emulador
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
