@@ -11,7 +11,7 @@ import com.example.tesisapp.data.local.dao.TaskDao
 import com.example.tesisapp.data.local.entity.TaskDefinitionEntity
 @Database(
     entities = [UserEntity::class, ProductEntity::class, LocationEntity::class, TaskDefinitionEntity::class, RouteEntity::class, StopEntity::class, CampaignEntity::class, CampaignTargetEntity::class],
-    version = 48,
+    version = 51,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

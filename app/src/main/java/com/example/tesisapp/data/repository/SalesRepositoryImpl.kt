@@ -26,7 +26,8 @@ class SalesRepositoryImpl(
 
             if (innerResponse != null && innerResponse.status == "success" && innerResponse.data != null) {
                 val entities = innerResponse.data.map { dto ->
-                    ProductEntity(dto.id, dto.name, dto.code, dto.price, dto.uomName, dto.imageUrl)
+                    val correctedImageUrl = dto.imageUrl.replace("localhost", "10.0.2.2")
+                    ProductEntity(dto.id, dto.name, dto.code, dto.price, dto.uomName, correctedImageUrl)
                 }
                 dao.clearProducts()
                 dao.insertProducts(entities)
@@ -55,9 +56,10 @@ class SalesRepositoryImpl(
                         cDto.id, cDto.name, cDto.type, cDto.metric ?: "", cDto.startDate, cDto.endDate
                     ))
                     cDto.targets.forEach { tDto ->
+                        val correctedImageUrl = tDto.imageUrl.replace("localhost", "10.0.2.2")
                         targets.add(CampaignTargetEntity(
                             tDto.lineId, cDto.id, tDto.productId, tDto.productName,
-                            tDto.targetAmount, tDto.currentAmount, tDto.achievementPercent, tDto.imageUrl
+                            tDto.targetAmount, tDto.currentAmount, tDto.achievementPercent, correctedImageUrl
                         ))
                     }
                 }
