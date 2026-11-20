@@ -8,14 +8,11 @@ import retrofit2.http.POST
 interface SalesApi {
 
     @POST("/api/products/catalog")
-    // CAMBIO: Ahora devolvemos OdooRpcWrapper<List<ProductDto>>
-    suspend fun getCatalog(@Body body: Map<String, String> = emptyMap()): OdooRpcWrapper<List<ProductDto>>
+    suspend fun getCatalog(@Body body: OdooJsonRpcRequest = OdooJsonRpcRequest()): OdooRpcWrapper<List<ProductDto>>
 
     @POST("/api/campaigns/my_status")
-    // CAMBIO: Aquí también
-    suspend fun getMyCampaigns(@Body body: Map<String, String> = emptyMap()): OdooRpcWrapper<List<CampaignDto>>
+    suspend fun getMyCampaigns(@Body body: OdooJsonRpcRequest = OdooJsonRpcRequest()): OdooRpcWrapper<List<CampaignDto>>
 
     @POST("/api/sales/create_order")
-    // CAMBIO: Aquí también
-    suspend fun createOrder(@Body request: CreateOrderRequest): OdooRpcWrapper<Any>
+    suspend fun createOrder(@Body request: OdooJsonRpcRequest): OdooRpcWrapper<CreateOrderResultDto>
 }

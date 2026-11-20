@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -18,11 +20,18 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "ODOO_DB_NAME", "\"${resolveDbName()}\"")
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8069/\"")
+        }
         release {
             isMinifyEnabled = false
+            val releaseBaseUrl = resolveReleaseApiBaseUrl()
+            validateReleaseApiBaseUrl(releaseBaseUrl)
+            buildConfigField("String", "API_BASE_URL", "\"$releaseBaseUrl\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -39,6 +48,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -90,7 +100,47 @@ dependencies {
     implementation(libs.androidx.preference)
 
     implementation(libs.play.services.location)
+    implementation("io.coil-kt:coil:2.4.0")
     implementation("io.coil-kt:coil-compose:2.4.0")
+    implementation("io.coil-kt:coil-network-okhttp:2.4.0")
 
     implementation("androidx.compose.material:material-icons-extended:1.6.8")
+}
+
+fun resolveDbName(): String {
+    return (
+        project.findProperty("ODOO_DB_NAME") as? String
+            ?: System.getenv("ODOO_DB_NAME")
+            ?: "odoo"
+        ).trim()
+}
+
+fun resolveReleaseApiBaseUrl(): String {
+    return (
+        project.findProperty("ODOO_API_BASE_URL") as? String
+            ?: System.getenv("ODOO_API_BASE_URL")
+            ?: "https://example.invalid/"
+        ).trim()
+}
+
+fun validateReleaseApiBaseUrl(value: String) {
+    val uri = try {
+        URI(value)
+    } catch (_: Exception) {
+        throw GradleException("ODOO_API_BASE_URL is not a valid URL: $value")
+    }
+    val host = uri.host?.lowercase().orEmpty()
+    val scheme = uri.scheme?.lowercase().orEmpty()
+    if (scheme != "https") {
+        throw GradleException("ODOO_API_BASE_URL must use https for release builds.")
+    }
+    if (host.isBlank()) {
+        throw GradleException("ODOO_API_BASE_URL must include a valid host.")
+    }
+    if (host == "localhost" || host == "127.0.0.1" || host == "0.0.0.0" || host == "10.0.2.2") {
+        throw GradleException("ODOO_API_BASE_URL cannot point to loopback hosts in release builds.")
+    }
+    if (!value.endsWith("/")) {
+        throw GradleException("ODOO_API_BASE_URL must end with '/'.")
+    }
 }

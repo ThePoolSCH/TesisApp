@@ -3,12 +3,10 @@ package com.example.tesisapp.ui.screens.main
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tesisapp.domain.model.Location
-import com.example.tesisapp.domain.repository.LocationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,19 +32,17 @@ class RoutesViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(RoutesUiState())
     val uiState = _uiState.asStateFlow()
+    private var initialSyncStarted = false
 
     init {
-        // 1. Observar la Ruta Local (Base de datos Room alimentada por Odoo)
         viewModelScope.launch {
             routeRepository.getTodayRoute().collect { odooRoute ->
                 if (odooRoute != null) {
-                    // CONVERTIR datos de Odoo -> Tus datos de UI (Location)
                     val mappedLocations = odooRoute.stops.map { stop ->
                         Location(
                             id = stop.id,
                             name = stop.partnerName,
                             address = stop.address,
-                            // Mapeo de estados de Odoo a tus estados de UI
                             status = when (stop.visitState) {
                                 "arrived" -> "En visita"  // Odoo 'arrived' = App 'En visita'
                                 "done" -> "Visitada"      // Odoo 'done' = App 'Visitada'
@@ -64,36 +60,57 @@ class RoutesViewModel @Inject constructor(
                             isLoading = false,
                             routeInfo = odooRoute, // Guardamos la info de la ruta (geometría, fecha)
                             locations = mappedLocations,
-                            // Recalcular visita activa basado en los nuevos datos
                             activeVisitLocation = mappedLocations.firstOrNull { it.status == "En visita" }
                         )
                     }
                 } else {
-                    // Si no hay ruta de Odoo, podrías cargar tus datos mock antiguos aquí
-                    // loadMockLocations()
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            routeInfo = null,
+                            locations = emptyList(),
+                            activeVisitLocation = null
+                        )
+                    }
                 }
             }
         }
     }
 
-    // --- NUEVA FUNCIÓN: Sincronizar con Odoo ---
-    fun onSyncPressed() {
+    fun ensureInitialSync() {
+        if (initialSyncStarted) return
+        initialSyncStarted = true
+        syncRoute(showMessage = false)
+    }
+
+    private fun syncRoute(showMessage: Boolean) {
+        if (_uiState.value.isSyncing) return
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true) }
-
             val result = routeRepository.syncRoute()
-
             _uiState.update {
                 it.copy(
                     isSyncing = false,
-                    syncMessage = if (result.isSuccess) "Ruta actualizada" else "Error al sincronizar"
+                    syncMessage = when {
+                        !showMessage -> null
+                        result.isSuccess -> "Ruta actualizada"
+                        else -> result.exceptionOrNull()?.message ?: "Error al sincronizar"
+                    }
                 )
             }
         }
     }
 
+    fun onSyncPressed() {
+        syncRoute(showMessage = true)
+    }
+
     fun clearSyncMessage() {
         _uiState.update { it.copy(syncMessage = null) }
+    }
+
+    fun onLocationUnavailable() {
+        _uiState.update { it.copy(syncMessage = "Activa el GPS para iniciar la visita.") }
     }
 
     // --- TUS FUNCIONES EXISTENTES (Ligeramente adaptadas) ---
@@ -114,7 +131,6 @@ class RoutesViewModel @Inject constructor(
                     return@launch
                 }
 
-                // 2. Calcular más cercano
                 val nearestStop = pendingStops.minByOrNull { stop ->
                     val stopLoc = AndroidLocation("stop")
                     stopLoc.latitude = stop.latitude ?: 0.0
@@ -125,24 +141,20 @@ class RoutesViewModel @Inject constructor(
                     userLoc.distanceTo(stopLoc)
                 }
 
-                // 3. Iniciar (Backend + Local)
                 if (nearestStop != null) {
-                    // Llamamos a Odoo para marcar check-in
                     val result = routeRepository.startVisit(nearestStop.id, userLat, userLon)
 
                     if (result.isSuccess) {
-                        // IMPORTANTE: Cambiamos estado a "En visita".
-                        // Esto hace que activeVisitLocation deje de ser null automáticamente
-                        // y se habiliten los tabs en MainScreen.
                         updateLocationStatusLocal(nearestStop.id, "En visita")
                     } else {
-                        // Manejo de error
+                        _uiState.update {
+                            it.copy(syncMessage = result.exceptionOrNull()?.message ?: "No se pudo iniciar la visita")
+                        }
                     }
                 }
                 _uiState.update { it.copy(isLoading = false) }
             }
         }
-        // B) FINALIZAR VISITA (Abrir diálogo)
         else {
             _uiState.update { it.copy(showFinishDialog = true) }
         }
@@ -154,11 +166,13 @@ class RoutesViewModel @Inject constructor(
             val activeLocation = _uiState.value.activeVisitLocation
 
             if (activeLocation != null) {
-                // 1. Actualización visual inmediata
                 updateLocationStatusLocal(activeLocation.id, "Visitada")
-
-                // 2. Llamada al Backend (Checkout)
-                routeRepository.finishVisit(activeLocation.id)
+                val result = routeRepository.finishVisit(activeLocation.id)
+                if (result.isFailure) {
+                    _uiState.update {
+                        it.copy(syncMessage = result.exceptionOrNull()?.message ?: "No se pudo finalizar la visita")
+                    }
+                }
             }
             onDismissFinishDialog()
         }

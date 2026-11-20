@@ -17,7 +17,8 @@ data class OdooRouteResponse(
 
 data class RouteResultDto(
     val status: String,
-    val data: RouteDataDto?
+    val data: RouteDataDto?,
+    val message: String? = null
 )
 
 data class RouteDataDto(
@@ -40,4 +41,8 @@ data class StopDto(
 )
 
 data class OdooCheckInResponse(val result: CheckInResult?)
-data class CheckInResult(val status: String, val message: String)
+data class CheckInResult(
+    val status: String,
+    val message: String? = null,
+    val data: Map<String, Any>? = null
+)

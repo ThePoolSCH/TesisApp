@@ -2,6 +2,7 @@ package com.example.tesisapp.di
 
 import android.content.Context
 import androidx.room.Room
+import com.example.tesisapp.BuildConfig
 import com.example.tesisapp.data.local.AppDatabase
 import com.example.tesisapp.data.local.RouteDao
 import com.example.tesisapp.data.local.SalesDao
@@ -98,7 +99,7 @@ object AppModule {
     @Singleton
     fun provideRetrofit(client: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("http://10.0.2.2:8069/") // IP Emulador
+            .baseUrl(BuildConfig.API_BASE_URL)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

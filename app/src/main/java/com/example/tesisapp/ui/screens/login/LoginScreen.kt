@@ -15,6 +15,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.tesisapp.BuildConfig
 
 @Composable
 fun LoginScreen(
@@ -25,7 +26,7 @@ fun LoginScreen(
 
     // Configuración de la Base de Datos (Oculta para el usuario)
     // Asegúrate de que este string sea EXACTAMENTE el nombre de tu BD en Odoo
-    val dbName by remember { mutableStateOf("odoo") }
+    val dbName by remember { mutableStateOf(BuildConfig.ODOO_DB_NAME) }
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }

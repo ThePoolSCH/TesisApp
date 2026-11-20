@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.tesisapp.domain.model.RouteStop
 import com.example.tesisapp.ui.components.FinishVisitDialog
@@ -29,7 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 
 @Composable
-fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
+fun RoutesScreen(viewModel: RoutesViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -42,13 +41,11 @@ fun RoutesScreen(viewModel: RoutesViewModel = hiltViewModel()) {
                 if (location != null) {
                     viewModel.onMainButtonClick(location.latitude, location.longitude)
                 } else {
-                    // Si es null (GPS apagado o emulador sin datos), usar 0.0 o mostrar error
-                    // Para pruebas puedes mandar 0.0, pero en prod mostrar un Toast "Active GPS"
-                    viewModel.onMainButtonClick(0.0, 0.0)
+                    viewModel.onLocationUnavailable()
                 }
             }
         } catch (e: SecurityException) {
-            // Manejar falta de permisos
+            viewModel.onLocationUnavailable()
         }
     }
 

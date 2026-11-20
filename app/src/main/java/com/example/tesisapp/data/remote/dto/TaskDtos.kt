@@ -4,7 +4,7 @@ import com.google.gson.annotations.SerializedName
 
 // 1. CLASE ENVOLTORIO GENÉRICA PARA ODOO
 data class OdooResultWrapper<T>(
-    @SerializedName("result") val result: T
+    @SerializedName("result") val result: T?
 )
 
 // 2. LA RESPUESTA INTERNA (Lo que tú definiste)

@@ -53,3 +53,9 @@ data class OdooRpcWrapper<T>(
     @SerializedName("jsonrpc") val jsonrpc: String,
     @SerializedName("result") val result: OdooResponse<T>? // Puede ser null si hay error
 )
+
+data class CreateOrderResultDto(
+    @SerializedName("order_id") val orderId: Int,
+    @SerializedName("name") val name: String?,
+    @SerializedName("amount_total") val amountTotal: Double?
+)

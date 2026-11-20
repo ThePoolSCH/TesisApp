@@ -3,9 +3,8 @@ package com.example.tesisapp.data.repository
 import android.util.Log
 import com.example.tesisapp.data.local.dao.TaskDao
 import com.example.tesisapp.data.local.entity.TaskDefinitionEntity
+import com.example.tesisapp.data.remote.OdooJsonRpcRequest
 import com.example.tesisapp.data.remote.OdooApiService
-import com.example.tesisapp.data.remote.dto.SubmitTaskRequest
-import com.example.tesisapp.data.remote.dto.TaskAnswerDto
 import com.example.tesisapp.domain.model.TaskDefinition
 import com.example.tesisapp.domain.repository.TaskRepository
 import javax.inject.Inject
@@ -58,11 +57,15 @@ class TaskRepositoryImpl @Inject constructor(
 
     override suspend fun submitTasks(routeLineId: Int, answers: Map<Int, Any>): Result<String> {
         return try {
-            val answerDtos = answers.map { (id, value) ->
-                TaskAnswerDto(definitionId = id, value = value)
+            val answerPayload = answers.map { (id, value) ->
+                mapOf("definition_id" to id, "value" to value)
             }
-
-            val request = SubmitTaskRequest(routeLineId = routeLineId, answers = answerDtos)
+            val request = OdooJsonRpcRequest(
+                params = mapOf(
+                    "route_line_id" to routeLineId,
+                    "answers" to answerPayload
+                )
+            )
 
             // También envolvemos la respuesta del submit
             val wrapper = api.submitTasks(request)

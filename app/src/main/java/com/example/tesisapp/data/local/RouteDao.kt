@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 interface RouteDao {
 
     @Transaction
-    @Query("SELECT * FROM routes ORDER BY date DESC LIMIT 1")
+    @Query("SELECT * FROM routes WHERE date = date('now', 'localtime') ORDER BY date DESC LIMIT 1")
     fun getLatestRouteWithStops(): Flow<RouteWithStops?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

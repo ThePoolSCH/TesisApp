@@ -49,8 +49,9 @@ class RouteRepositoryImpl @Inject constructor(
         return try {
             val response = api.getTodayRoute(OdooJsonRpcRequest())
 
-            if (response.isSuccessful && response.body()?.result?.status == "success") {
-                val data = response.body()?.result?.data
+            val result = response.body()?.result
+            if (response.isSuccessful && result?.status == "success") {
+                val data = result.data
 
                 if (data != null) {
                     val routeEntity = RouteEntity(
@@ -78,10 +79,11 @@ class RouteRepositoryImpl @Inject constructor(
                     dao.updateRouteData(routeEntity, stopsEntities)
                     Result.success(Unit)
                 } else {
-                    Result.failure(Exception("Datos vacíos"))
+                    Result.failure(Exception(result.message ?: "Datos vacíos"))
                 }
             } else {
-                Result.failure(Exception("Error en API o No hay ruta"))
+                val backendMessage = result?.message ?: "Error en API o No hay ruta"
+                Result.failure(Exception(backendMessage))
             }
         } catch (e: Exception) {
             e.printStackTrace()
