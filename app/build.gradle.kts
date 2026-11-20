@@ -102,7 +102,7 @@ dependencies {
     implementation(libs.play.services.location)
     implementation("io.coil-kt:coil:2.4.0")
     implementation("io.coil-kt:coil-compose:2.4.0")
-    implementation("io.coil-kt:coil-network-okhttp:2.4.0")
+    // Coil 2.x ya usa OkHttp; "coil-network-okhttp" es un artefacto de Coil 3 (io.coil-kt.coil3) y no existe en 2.4.0
 
     implementation("androidx.compose.material:material-icons-extended:1.6.8")
 }
