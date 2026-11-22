@@ -12,18 +12,36 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.example.tesisapp.BuildConfig
 import com.example.tesisapp.domain.model.RouteStop
 import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.TileSourcePolicy
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.CopyrightOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.io.File
 import kotlin.math.pow
+
+/**
+ * Igual a TileSourceFactory.MAPNIK (tile.openstreetmap.org, sin descarga masiva ni precarga), pero SIN
+ * FLAG_USER_AGENT_NORMALIZED. Con esa bandera osmdroid 6.1.x ignora userAgentValue y envía
+ * "<paquete>/<versionCode>" ("com.example.tesisapp/1"), que OSM responde con mosaicos "Access blocked".
+ */
+private val OSM_TESISAPP = XYTileSource(
+    "Mapnik-TesisApp", 0, 19, 256, ".png",
+    arrayOf("https://tile.openstreetmap.org/"),
+    "© OpenStreetMap contributors",
+    TileSourcePolicy(
+        2,
+        TileSourcePolicy.FLAG_NO_BULK or TileSourcePolicy.FLAG_NO_PREVENTIVE or TileSourcePolicy.FLAG_USER_AGENT_MEANINGFUL
+    )
+)
 
 @Composable
 fun RouteMap(
@@ -46,13 +64,16 @@ fun RouteMap(
             context,
             androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
         )
-        Configuration.getInstance().userAgentValue = context.packageName
+        // La política de tile.openstreetmap.org exige un User-Agent propio y estable de la app; con el
+        // nombre de paquete (com.example.tesisapp) o el de la librería, OSM devuelve mosaicos "Access blocked".
+        Configuration.getInstance().userAgentValue = "TesisApp/${BuildConfig.VERSION_NAME} (tesis PUCP; Android)"
 
-        // Configuración de caché
+        // Configuración de caché. Carpeta "tile_v2": la anterior puede tener guardados los mosaicos de bloqueo.
         val osmPath = File(context.filesDir, "osmdroid")
         osmPath.mkdirs()
         Configuration.getInstance().osmdroidBasePath = osmPath
-        Configuration.getInstance().osmdroidTileCache = File(osmPath, "tile")
+        Configuration.getInstance().osmdroidTileCache = File(osmPath, "tile_v2")
+        File(osmPath, "tile").deleteRecursively()
         true
     }
 
@@ -61,7 +82,7 @@ fun RouteMap(
         modifier = modifier,
         factory = { ctx ->
             MapView(ctx).apply {
-                setTileSource(TileSourceFactory.MAPNIK)
+                setTileSource(OSM_TESISAPP)
                 setMultiTouchControls(true)
                 isHorizontalMapRepetitionEnabled = false
                 isVerticalMapRepetitionEnabled = false
@@ -96,6 +117,7 @@ fun RouteMap(
 
         // A. LIMPIEZA TOTAL (Para evitar duplicados y controlar el orden Z)
         map.overlays.clear()
+        map.overlays.add(CopyrightOverlay(context)) // atribución obligatoria: "© OpenStreetMap contributors"
 
         // B. CALCULAR GEOMETRÍA RECORTADA (Lógica solicitada)
         val slicedGeometry = calculateSlicedGeometry(geometry, stops)
