@@ -119,7 +119,7 @@ fun resolveDbName(): String {
     return (
         project.findProperty("ODOO_DB_NAME") as? String
             ?: System.getenv("ODOO_DB_NAME")
-            ?: "odoo"
+            ?: "tesis" // F4 (A4): la base del entorno local; antes "odoo" hacía fallar el login si se olvidaba -P
         ).trim()
 }
 

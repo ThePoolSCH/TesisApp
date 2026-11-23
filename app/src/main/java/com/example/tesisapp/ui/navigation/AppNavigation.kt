@@ -47,6 +47,11 @@ fun AppNavigation(sesion: MainViewModel = hiltViewModel()) {
                 onNavigateToProfile = { navController.navigate(Routes.PROFILE) }
             )
         }
-        composable(Routes.PROFILE) { ProfileScreen() }
+        composable(Routes.PROFILE) {
+            ProfileScreen(
+                onBack = { navController.popBackStack() },
+                onLogout = { navController.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } } }
+            )
+        }
     }
 }

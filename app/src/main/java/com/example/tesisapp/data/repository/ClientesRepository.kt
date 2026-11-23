@@ -57,6 +57,18 @@ data class Liquidacion(val settlement: String, val date: String, val state: Stri
 data class MisComisiones(val campaigns: List<CampanaComision> = emptyList(), val settlements: List<Liquidacion> = emptyList(),
                          val currency: String = "PEN")
 
+data class MesPerfil(
+    val start: String = "", @SerializedName("visits_planned") val visitsPlanned: Int = 0,
+    @SerializedName("visits_done") val visitsDone: Int = 0, @SerializedName("visits_with_order") val visitsWithOrder: Int = 0,
+    val orders: Int = 0, val sales: Double = 0.0
+)
+data class Perfil(
+    val name: String = "", val login: String = "", val email: String = "", val phone: String = "",
+    val company: String = "", val currency: String = "PEN", val district: String = "", val region: String = "",
+    val supervisor: String = "", @SerializedName("supervisor_phone") val supervisorPhone: String = "",
+    @SerializedName("daily_capacity") val dailyCapacity: Int = 0, val clients: Int = 0, val month: MesPerfil = MesPerfil()
+)
+
 /** Resultado de las llamadas que necesitan conexión. */
 sealed class Online<out T> {
     data class Ok<T>(val value: T, val message: String? = null) : Online<T>()
@@ -123,5 +135,18 @@ class ClientesRepository @Inject constructor(
         else -> mensaje(r)
     }
 
-    companion object { private const val CLAVE_COMISIONES = "mis_comisiones" }
+    // ---------- Perfil (D4) ----------
+    val perfil: Flow<Pair<Perfil?, Long>> = cola.observeCache(CLAVE_PERFIL).map { c ->
+        (c?.let { gson.fromJson(it.json, Perfil::class.java) }) to (c?.updatedAt ?: 0L)
+    }
+
+    suspend fun actualizarPerfil(): String? = when (val r = rpc.call("/api/me")) {
+        is RpcResult.Ok -> { cola.putCache(CacheEntity(CLAVE_PERFIL, r.data.toString())); null }
+        else -> mensaje(r)
+    }
+
+    companion object {
+        private const val CLAVE_COMISIONES = "mis_comisiones"
+        private const val CLAVE_PERFIL = "mi_perfil"
+    }
 }
