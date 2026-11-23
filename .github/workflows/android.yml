@@ -1,0 +1,44 @@
+# F4 · bloque 7: compila la app y corre las pruebas unitarias (cola sin conexión, fusión de paradas, RPC, formato).
+name: App Android
+
+on:
+  push:
+    branches: [master, main, "feature/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compilar-y-probar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle (con caché)
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Pruebas unitarias y cobertura (JaCoCo)
+        run: ./gradlew createDebugUnitTestCoverageReport -PODOO_DB_NAME=tesis --console=plain
+
+      - name: Compilar APK de depuración
+        run: ./gradlew assembleDebug -PODOO_DB_NAME=tesis --console=plain
+
+      - name: Guardar reportes
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reportes-app
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/reports/coverage/test/debug/
+            app/build/outputs/apk/debug/app-debug.apk

@@ -1,106 +1,179 @@
 package com.example.tesisapp.ui.screens.main
 
+import android.location.Location as AndroidLocation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tesisapp.domain.model.Location
-import com.example.tesisapp.domain.repository.LocationRepository
+import com.example.tesisapp.data.sync.OutboxRepository
+import com.example.tesisapp.domain.model.Route
+import com.example.tesisapp.domain.model.RouteStop
+import com.example.tesisapp.domain.model.TaskType
+import com.example.tesisapp.domain.repository.RouteRepository
+import com.example.tesisapp.domain.repository.SalesRepository
+import com.example.tesisapp.domain.repository.TaskRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** Llegada pendiente de confirmar porque el GPS está fuera del radio. */
+data class FueraDeRango(val stop: RouteStop, val distanciaM: Double, val radioM: Double, val lat: Double, val lon: Double)
+
+data class TareasVisita(val hechas: Int = 0, val total: Int = 0, val obligatoriasFaltan: Int = 0)
+
 data class RoutesUiState(
     val isLoading: Boolean = true,
-    val locations: List<Location> = emptyList(),
-    // Rastrea la ubicación que está actualmente "En visita"
-    val activeVisitLocation: Location? = null,
-    // Controla la visibilidad del diálogo de finalización
-    val showFinishDialog: Boolean = false
-)
+    val routeInfo: Route? = null,
+    val isSyncing: Boolean = false,
+    val syncMessage: String? = null,
+    val miUbicacion: Pair<Double, Double>? = null,
+    val fueraDeRango: FueraDeRango? = null,
+    val showFinishSheet: Boolean = false,
+    val tareas: TareasVisita = TareasVisita()
+) {
+    val stops: List<RouteStop> get() = routeInfo?.stops.orEmpty()
+    val activeStop: RouteStop? get() = stops.firstOrNull { it.visitState == "arrived" }
+    val nextStop: RouteStop? get() = stops.filter { it.visitState == "pending" }.minByOrNull { it.sequence }
+    val hechas: Int get() = stops.count { it.visitState == "done" }
+    val radioM: Double get() = routeInfo?.checkinRadiusM ?: 100.0
+
+    fun distanciaA(stop: RouteStop): Double? = miUbicacion?.let { (lat, lon) -> distancia(lat, lon, stop) }
+}
+
+fun distancia(lat: Double, lon: Double, stop: RouteStop): Double {
+    val r = FloatArray(1)
+    AndroidLocation.distanceBetween(lat, lon, stop.latitude, stop.longitude, r)
+    return r[0].toDouble()
+}
 
 @HiltViewModel
 class RoutesViewModel @Inject constructor(
-    private val locationRepository: LocationRepository
+    private val routeRepository: RouteRepository,
+    private val taskRepository: TaskRepository,
+    private val salesRepository: SalesRepository,
+    private val outbox: OutboxRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RoutesUiState())
     val uiState = _uiState.asStateFlow()
+    private var initialSyncStarted = false
+    private var tareasJob: Job? = null
+    private var visitaObservada: Int? = null
 
     init {
         viewModelScope.launch {
-            locationRepository.seedLocationsIfEmpty()
+            routeRepository.getTodayRoute().collect { route ->
+                _uiState.update { it.copy(isLoading = false, routeInfo = route) }
+                observarTareas(_uiState.value.activeStop)
+            }
+        }
+    }
 
-            locationRepository.getLocations().map { locations ->
-                locations.sortedWith(compareBy {
-                    when (it.status) {
-                        "En visita" -> 0
-                        "Pendiente" -> 1
-                        else -> 2
-                    }
-                })
-            }.collect { sortedLocations ->
+    /** Resumen de tareas de la visita en curso para la hoja "Terminar visita". */
+    private fun observarTareas(stop: RouteStop?) {
+        if (stop?.id == visitaObservada) return
+        visitaObservada = stop?.id
+        tareasJob?.cancel()
+        if (stop == null) { _uiState.update { it.copy(tareas = TareasVisita()) }; return }
+        tareasJob = viewModelScope.launch {
+            val defs = taskRepository.definitionsFor(stop.clientType)
+            taskRepository.observeAnswers(stop.id).collect { (answers, _) ->
+                val respondidas = answers.filter { a ->
+                    when (val v = a.value) { null -> false; is String -> v.isNotBlank(); else -> true }
+                }.map { it.definitionId }.toSet()
                 _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        locations = sortedLocations,
-                        // Busca si hay una visita activa y la guarda en el estado
-                        activeVisitLocation = sortedLocations.firstOrNull { loc -> loc.status == "En visita" }
-                    )
+                    it.copy(tareas = TareasVisita(
+                        hechas = defs.count { d -> d.id in respondidas }, total = defs.size,
+                        obligatoriasFaltan = defs.count { d -> d.isRequired && d.id !in respondidas }))
                 }
             }
         }
     }
 
-    /**
-     * Maneja el clic en el botón principal.
-     * Si no hay visita activa, inicia una.
-     * Si hay una visita activa, muestra el diálogo para terminarla.
-     */
-    fun onMainButtonClick() {
-        if (_uiState.value.activeVisitLocation == null) {
-            // Iniciar visita
-            viewModelScope.launch {
-                val pendingLocation = _uiState.value.locations
-                    .filter { it.status == "Pendiente" }
-                    .randomOrNull()
-
-                pendingLocation?.let {
-                    locationRepository.updateLocationStatus(it.id, "En visita")
-                }
-            }
-        } else {
-            // Mostrar diálogo para terminar visita
-            _uiState.update { it.copy(showFinishDialog = true) }
-        }
+    fun ensureInitialSync() {
+        if (initialSyncStarted) return
+        initialSyncStarted = true
+        syncRoute(showMessage = false)
     }
 
-    fun onDismissFinishDialog() {
-        _uiState.update { it.copy(showFinishDialog = false) }
-    }
-
-    /**
-     * Confirma la finalización de la visita, cambiando el estado a "Visitada".
-     */
-    fun onConfirmFinishVisit() {
+    /** Sincroniza la ruta y descarga lo necesario para trabajar sin conexión: tareas, catálogo y pedido sugerido. */
+    private fun syncRoute(showMessage: Boolean) {
+        if (_uiState.value.isSyncing) return
         viewModelScope.launch {
-            _uiState.value.activeVisitLocation?.let {
-                locationRepository.updateLocationStatus(it.id, "Visitada")
+            _uiState.update { it.copy(isSyncing = true) }
+            outbox.sincronizarAhora()
+            val result = routeRepository.syncRoute()
+            if (result.isSuccess) {
+                launch { taskRepository.refreshDefinitions(); visitaObservada = null; observarTareas(_uiState.value.activeStop) }
+                launch { salesRepository.syncProducts() }
+                launch { salesRepository.syncCampaigns() }
+                launch {
+                    // Se leen las paradas recién guardadas (el estado de la pantalla aún puede tener las anteriores)
+                    val ids = routeRepository.getTodayRoute().first()?.stops.orEmpty().map { it.partnerId }.filter { it > 0 }
+                    salesRepository.syncSuggested(ids)
+                }
             }
-            // Ocultamos el diálogo después de confirmar
-            onDismissFinishDialog()
+            _uiState.update {
+                it.copy(isSyncing = false, syncMessage = when {
+                    result.isSuccess -> if (showMessage) "Ruta actualizada" else null
+                    else -> result.exceptionOrNull()?.message ?: "Error al sincronizar"
+                })
+            }
         }
     }
 
+    fun onSyncPressed() = syncRoute(showMessage = true)
+
+    fun clearSyncMessage() = _uiState.update { it.copy(syncMessage = null) }
+
+    fun onLocationUnavailable() = _uiState.update { it.copy(syncMessage = "Activa el GPS para validar la llegada.") }
+
+    fun onUbicacion(lat: Double, lon: Double) = _uiState.update { it.copy(miUbicacion = lat to lon) }
+
     /**
-     * Placeholder para la lógica de reportar incidente.
+     * "Validar llegada": elige la parada pendiente más cercana si está dentro del radio; si no, la siguiente de la ruta.
+     * La distancia se calcula en el teléfono (funciona sin conexión) con el mismo radio que usa Odoo.
      */
-    fun onReportIncident() {
-        // Aquí iría la lógica para navegar a una pantalla de reporte, etc.
-        println("DEBUG: Incidente reportado para la ubicación ${_uiState.value.activeVisitLocation?.name}")
-        onDismissFinishDialog()
+    fun onValidarLlegada(lat: Double, lon: Double) {
+        val s = _uiState.value
+        onUbicacion(lat, lon)
+        val pendientes = s.stops.filter { it.visitState == "pending" }
+        if (pendientes.isEmpty()) return
+        val cercana = pendientes.minByOrNull { distancia(lat, lon, it) }!!
+        val stop = if (distancia(lat, lon, cercana) <= s.radioM) cercana else (s.nextStop ?: cercana)
+        val d = distancia(lat, lon, stop)
+        if (d > s.radioM) {
+            _uiState.update { it.copy(fueraDeRango = FueraDeRango(stop, d, s.radioM, lat, lon)) }
+        } else {
+            viewModelScope.launch { routeRepository.registrarLlegada(stop, lat, lon, false, null) }
+        }
+    }
+
+    fun onRegistrarFueraDeRango(motivo: String) {
+        val f = _uiState.value.fueraDeRango ?: return
+        _uiState.update { it.copy(fueraDeRango = null) }
+        viewModelScope.launch { routeRepository.registrarLlegada(f.stop, f.lat, f.lon, true, motivo) }
+    }
+
+    fun onCerrarFueraDeRango() = _uiState.update { it.copy(fueraDeRango = null) }
+
+    fun onFinalizarClick() = _uiState.update { it.copy(showFinishSheet = true) }
+
+    fun onDismissFinish() = _uiState.update { it.copy(showFinishSheet = false) }
+
+    fun onConfirmarFin(resultado: String, nota: String) {
+        val stop = _uiState.value.activeStop ?: return
+        _uiState.update { it.copy(showFinishSheet = false) }
+        viewModelScope.launch {
+            // Si quedaron respuestas de tareas sin enviar, se envían antes del cierre (la cola respeta el orden)
+            val (answers, enviadas) = taskRepository.observeAnswers(stop.id).first()
+            if (answers.isNotEmpty() && !enviadas) {
+                val defs = taskRepository.definitionsFor(stop.clientType)
+                taskRepository.submit(stop.id, stop.partnerName, answers, defs)
+            }
+            val ubic = _uiState.value.miUbicacion
+            routeRepository.terminarVisita(stop, resultado, nota, ubic?.first, ubic?.second)
+            _uiState.update { it.copy(syncMessage = "Visita guardada. Se enviará a Odoo en cuanto haya conexión.") }
+        }
     }
 }

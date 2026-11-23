@@ -1,40 +1,45 @@
 package com.example.tesisapp.ui.screens.login
 
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tesisapp.domain.repository.AuthRepository
 import com.example.tesisapp.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class LoginUiState(
-    val isLoading: Boolean = false,
-    val loginSuccess: Boolean = false,
-    val error: String? = null
-)
-
 @HiltViewModel
 class LoginViewModel @Inject constructor(
+    private val repository: AuthRepository,
     private val userRepository: UserRepository
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(LoginUiState())
-    val uiState = _uiState.asStateFlow()
+    private val _state = mutableStateOf(LoginState())
+    val state: State<LoginState> = _state
 
-    fun login(email: String, pass: String) {
+    fun onLogin(db: String, user: String, pass: String) {
+        _state.value = _state.value.copy(isLoading = true, error = null)
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            val result = repository.login(db, user, pass)
 
-            val result = userRepository.login(email, pass)
+            result.onSuccess { userOdoo ->
+                // <--- 3. IMPORTANTE: Guardamos el usuario antes de cambiar el estado a success
+                userRepository.saveUser(userOdoo)
 
-            result.onSuccess {
-                _uiState.update { it.copy(isLoading = false, loginSuccess = true) }
-            }.onFailure { throwable ->
-                _uiState.update { it.copy(isLoading = false, error = throwable.message ?: "Error desconocido") }
+                _state.value = _state.value.copy(isLoading = false, success = true)
+
+            }.onFailure { exception ->
+                _state.value = _state.value.copy(isLoading = false, error = exception.message)
             }
         }
     }
 }
+
+data class LoginState(
+    val isLoading: Boolean = false,
+    val success: Boolean = false,
+    val error: String? = null
+)

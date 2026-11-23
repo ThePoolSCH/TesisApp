@@ -1,68 +1,91 @@
 package com.example.tesisapp.data.repository
 
-
+import android.util.Log
+import com.example.tesisapp.data.local.PendingOpEntity
+import com.example.tesisapp.data.local.TaskDraftEntity
+import com.example.tesisapp.data.local.dao.ColaDao
 import com.example.tesisapp.data.local.dao.TaskDao
-import com.example.tesisapp.data.local.entity.TaskEntity
-import com.example.tesisapp.domain.model.Task
+import com.example.tesisapp.data.local.entity.TaskDefinitionEntity
+import com.example.tesisapp.data.remote.OdooApiService
+import com.example.tesisapp.data.sync.OutboxRepository
+import com.example.tesisapp.domain.model.TaskAnswer
+import com.example.tesisapp.domain.model.TaskDefinition
+import com.example.tesisapp.domain.model.TaskType
 import com.example.tesisapp.domain.repository.TaskRepository
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import com.google.gson.Gson
+import com.google.gson.JsonParser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 import javax.inject.Inject
-import javax.inject.Singleton
 
-@Singleton
 class TaskRepositoryImpl @Inject constructor(
-    private val taskDao: TaskDao
+    private val api: OdooApiService,
+    private val dao: TaskDao,
+    private val cola: ColaDao,
+    private val outbox: OutboxRepository
 ) : TaskRepository {
 
-    // Mapper de Entity (DB) a Model (Domain)
-    private fun TaskEntity.toDomain(): Task {
-        return Task(
-            id = this.id,
-            locationId = this.locationId,
-            name = this.name,
-            description = this.description,
-            priority = this.priority,
-            status = this.status,
-            requiresEvidence = this.requiresEvidence,
-            requiresAnnotation = this.requiresAnnotation,
-            evidenceUri = this.evidenceUri,
-            annotationText = this.annotationText
-        )
+    private val gson = Gson()
+
+    override suspend fun refreshDefinitions(): Result<Unit> = try {
+        val response = api.getTaskDefinitions().result
+        if (response?.status == "success") {
+            dao.updateTasksCache(response.data.mapIndexed { i, dto ->
+                TaskDefinitionEntity(
+                    id = dto.id, question = dto.question, type = dto.type, isRequired = dto.required, sequence = i,
+                    options = dto.options.orEmpty().joinToString("|"), unit = dto.unit.orEmpty(),
+                    clientType = dto.clientType.orEmpty(), originKind = dto.origin?.kind ?: "all",
+                    originLabel = dto.origin?.label.orEmpty()
+                )
+            })
+            Result.success(Unit)
+        } else Result.failure(Exception("No se pudieron descargar las tareas."))
+    } catch (e: Exception) {
+        Log.w("TaskRepo", "Sin conexión al descargar tareas: ${e.message}")
+        Result.failure(e)
     }
 
-    init {
-        // Al crear el repositorio, comprobamos si la tabla de tareas está vacía
-        // y la poblamos con datos de prueba si es necesario.
-        CoroutineScope(Dispatchers.IO).launch {
-            if (taskDao.count() == 0) {
-                taskDao.insertAll(getHardcodedTasks())
+    override suspend fun definitionsFor(clientType: String): List<TaskDefinition> =
+        dao.getAllTasks().map { it.toDomain() }.filter { it.aplicaA(clientType) }
+
+    override fun observeAnswers(routeLineId: Int): Flow<Pair<List<TaskAnswer>, Boolean>> =
+        cola.observeDrafts(routeLineId).map { drafts ->
+            drafts.map { d ->
+                TaskAnswer(d.definitionId, leerValor(d.valueJson), d.photoTakenAt, d.photoLat, d.photoLon, d.photoKb)
+            } to (drafts.isNotEmpty() && drafts.all { it.sent })
+        }
+
+    private fun leerValor(json: String): Any? {
+        val e = JsonParser.parseString(json)
+        if (e.isJsonNull || !e.isJsonPrimitive) return null
+        val p = e.asJsonPrimitive
+        return when {
+            p.isBoolean -> p.asBoolean
+            p.isNumber -> p.asDouble
+            else -> p.asString
+        }
+    }
+
+    override suspend fun saveAnswer(routeLineId: Int, answer: TaskAnswer) {
+        cola.upsertDraft(TaskDraftEntity(routeLineId, answer.definitionId, gson.toJson(answer.value),
+            answer.photoTakenAt, answer.photoLat, answer.photoLon, answer.photoKb, sent = false))
+    }
+
+    override suspend fun clearAnswer(routeLineId: Int, definitionId: Int) = cola.deleteDraft(routeLineId, definitionId)
+
+    override suspend fun submit(routeLineId: Int, partnerName: String, answers: List<TaskAnswer>, definitions: List<TaskDefinition>) {
+        val porId = definitions.associateBy { it.id }
+        val payload = answers.mapNotNull { a ->
+            val def = porId[a.definitionId] ?: return@mapNotNull null
+            when (def.type) {
+                TaskType.PHOTO -> mapOf("definition_id" to a.definitionId, "photo_path" to a.value,
+                    "photo" to mapOf("taken_at" to a.photoTakenAt, "latitude" to a.photoLat, "longitude" to a.photoLon))
+                TaskType.NUMBER -> mapOf("definition_id" to a.definitionId, "value" to a.value)
+                else -> mapOf("definition_id" to a.definitionId, "value" to a.value)
             }
         }
-    }
-
-    override fun getTasksForLocation(locationId: Int): Flow<List<Task>> {
-        return taskDao.getTasksForLocation(locationId).map { entities ->
-            entities.map { it.toDomain() }
-        }
-    }
-
-    // --- DATOS HARDCODEADOS ---
-    private fun getHardcodedTasks(): List<TaskEntity> {
-        return listOf(
-            // Tareas para "Bodega Mi Pueblo" (locationId = 1)
-            TaskEntity(locationId = 1, name = "Verificar Inventario", description = "Contar stock de bebidas gaseosas y snacks.", priority = "Alta", status = "Pendiente", requiresEvidence = false, requiresAnnotation = true),
-            TaskEntity(locationId = 1, name = "Storechecking", description = "Tomar foto de la exhibición de la competencia.", priority = "Media", status = "Pendiente", requiresEvidence = true, requiresAnnotation = false),
-
-            // Tareas para "Market Express" (locationId = 2)
-            TaskEntity(locationId = 2, name = "Proponer Productos Nuevos", description = "Sugerir al menos 2 productos nuevos para el local y tomar nota de la respuesta del encargado.", priority = "Alta", status = "Pendiente", requiresEvidence = false, requiresAnnotation = true),
-            TaskEntity(locationId = 2, name = "Revisar Precios", description = "Verificar que los precios de nuestros productos clave estén correctos.", priority = "Media", status = "Pendiente", requiresEvidence = false, requiresAnnotation = false),
-
-            // Tareas para "Minimarket El Sol" (locationId = 3)
-            TaskEntity(locationId = 3, name = "Actualizar Material POP", description = "Colocar los nuevos afiches promocionales en la entrada.", priority = "Baja", status = "Pendiente", requiresEvidence = true, requiresAnnotation = true)
-        )
+        cola.marcarEnviadas(routeLineId)
+        outbox.encolar(PendingOpEntity.TASKS, routeLineId, "Tareas · $partnerName",
+            mapOf("route_line_id" to routeLineId, "answers" to payload))
     }
 }
