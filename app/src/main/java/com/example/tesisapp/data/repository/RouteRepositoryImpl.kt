@@ -24,8 +24,6 @@ class RouteRepositoryImpl @Inject constructor(
     private val outbox: OutboxRepository
 ) : RouteRepository {
 
-    private val orden = mapOf("pending" to 0, "arrived" to 1, "done" to 2)
-
     override fun getTodayRoute(): Flow<Route?> {
         return dao.getLatestRouteWithStops().map { entity ->
             entity?.let {
@@ -57,27 +55,17 @@ class RouteRepositoryImpl @Inject constructor(
                 return Result.failure(Exception(result?.message ?: "No se pudo obtener la ruta (error ${response.code()})"))
             }
             val data = result.data
-            // Lo hecho en el teléfono y aún no enviado no se pierde: si la parada local está más avanzada
-            // (pendiente < en visita < visitada) que en el servidor, se conserva su estado.
-            val locales = dao.getStops().associateBy { it.id }
-            val stops = data.stops.map { s ->
-                val servidor = StopEntity(
+            val servidor = data.stops.map { s ->
+                StopEntity(
                     id = s.id, routeId = data.routeId, sequence = s.sequence, partnerName = s.partnerName,
                     address = s.address, latitude = s.latitude, longitude = s.longitude, visitState = s.visitState,
                     totalSold = s.totalSold, partnerId = s.partnerId ?: 0, street = s.street.orEmpty(),
                     plannedArrival = s.plannedArrival.orEmpty(), visitResult = s.visitResult.orEmpty(),
                     visitClass = s.visitClass.orEmpty(), clientType = s.clientType.orEmpty(), unplanned = s.unplanned == true
                 )
-                val local = locales[s.id]
-                when {
-                    local == null -> servidor
-                    (orden[local.visitState] ?: 0) > (orden[servidor.visitState] ?: 0) -> servidor.copy(
-                        visitState = local.visitState, visitResult = local.visitResult.ifBlank { servidor.visitResult },
-                        checkinAt = local.checkinAt, outOfRange = local.outOfRange,
-                        totalSold = maxOf(local.totalSold, servidor.totalSold))
-                    else -> servidor.copy(checkinAt = local.checkinAt, outOfRange = local.outOfRange)
-                }
             }
+            // Lo hecho en el teléfono y aún no enviado no se pierde (ver FusionParadas.kt)
+            val stops = fusionarParadas(dao.getStops().associateBy { it.id }, servidor)
             dao.updateRouteData(
                 RouteEntity(id = data.routeId, name = data.routeName, date = data.date,
                     geometryJson = Gson().toJson(data.geometry), checkinRadiusM = data.checkinRadiusM ?: 100.0),

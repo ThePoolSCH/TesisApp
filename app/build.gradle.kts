@@ -26,6 +26,7 @@ android {
     buildTypes {
         debug {
             buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8069/\"")
+            enableUnitTestCoverage = true // F4: ./gradlew createDebugUnitTestCoverageReport (JaCoCo)
         }
         release {
             isMinifyEnabled = false
@@ -63,6 +64,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1") // F4: pruebas de la cola
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

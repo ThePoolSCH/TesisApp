@@ -89,37 +89,14 @@ class OutboxRepository @Inject constructor(
     suspend fun descartar(id: Long) = dao.delete(id)
     fun sincronizarAhora() = programar(context)
 
-    enum class Fin { LISTO, REINTENTAR }
-
     suspend fun procesar(): Fin {
-        var hubo = true
-        while (hubo) {
-            hubo = false
-            val bloqueadas = dao.conError().map { it.routeLineId }.toMutableSet()
-            for (op in dao.pendientes()) {
-                if (op.routeLineId in bloqueadas) continue
-                when (val r = enviar(op)) {
-                    is RpcResult.Ok -> { dao.delete(op.id); hubo = true }
-                    is RpcResult.SinRed -> {
-                        dao.update(op.copy(attempts = op.attempts + 1, lastError = r.message))
-                        return Fin.REINTENTAR
-                    }
-                    RpcResult.SesionVencida -> {
-                        dao.update(op.copy(status = PendingOpEntity.STATUS_ERROR, attempts = op.attempts + 1,
-                            lastError = "La sesión venció: vuelve a iniciar sesión y toca Reintentar."))
-                        return Fin.LISTO
-                    }
-                    is RpcResult.Rechazo -> {
-                        dao.update(op.copy(status = PendingOpEntity.STATUS_ERROR, attempts = op.attempts + 1, lastError = r.message))
-                        bloqueadas += op.routeLineId
-                    }
-                }
-            }
-        }
+        val fin = ProcesadorCola(dao, ::enviar).procesar()
         val t = System.currentTimeMillis()
-        prefs.edit().putLong("ultima", t).apply()
-        ultima.value = t
-        return Fin.LISTO
+        if (fin == Fin.LISTO) {
+            prefs.edit().putLong("ultima", t).apply()
+            ultima.value = t
+        }
+        return fin
     }
 
     private suspend fun enviar(op: PendingOpEntity): RpcResult {
@@ -159,6 +136,46 @@ class OutboxRepository @Inject constructor(
     }
 }
 
+enum class Fin { LISTO, REINTENTAR }
+
+/**
+ * Envía la cola en orden (sin dependencias de Android, para probarlo en la JVM).
+ * - Éxito: se borra la operación.
+ * - Sin red / servidor caído: se cuenta el intento y se detiene todo (WorkManager reintenta con espera exponencial).
+ * - Rechazo de Odoo: queda en "error" y se saltan las siguientes de la MISMA visita (no se cierra una visita cuya
+ *   llegada fue rechazada); las de otras visitas siguen.
+ * - Sesión vencida: queda en "error" con el aviso y se detiene (hay que volver a iniciar sesión).
+ */
+class ProcesadorCola(private val dao: ColaDao, private val enviar: suspend (PendingOpEntity) -> RpcResult) {
+    suspend fun procesar(): Fin {
+        var hubo = true
+        while (hubo) {
+            hubo = false
+            val bloqueadas = dao.conError().map { it.routeLineId }.toMutableSet()
+            for (op in dao.pendientes()) {
+                if (op.routeLineId in bloqueadas) continue
+                when (val r = enviar(op)) {
+                    is RpcResult.Ok -> { dao.delete(op.id); hubo = true }
+                    is RpcResult.SinRed -> {
+                        dao.update(op.copy(attempts = op.attempts + 1, lastError = r.message))
+                        return Fin.REINTENTAR
+                    }
+                    RpcResult.SesionVencida -> {
+                        dao.update(op.copy(status = PendingOpEntity.STATUS_ERROR, attempts = op.attempts + 1,
+                            lastError = "La sesión venció: vuelve a iniciar sesión y toca Reintentar."))
+                        return Fin.LISTO
+                    }
+                    is RpcResult.Rechazo -> {
+                        dao.update(op.copy(status = PendingOpEntity.STATUS_ERROR, attempts = op.attempts + 1, lastError = r.message))
+                        bloqueadas += op.routeLineId
+                    }
+                }
+            }
+        }
+        return Fin.LISTO
+    }
+}
+
 @HiltWorker
 class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
@@ -166,7 +183,7 @@ class SyncWorker @AssistedInject constructor(
     private val outbox: OutboxRepository
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = when (outbox.procesar()) {
-        OutboxRepository.Fin.LISTO -> Result.success()
-        OutboxRepository.Fin.REINTENTAR -> Result.retry()
+        Fin.LISTO -> Result.success()
+        Fin.REINTENTAR -> Result.retry()
     }
 }
