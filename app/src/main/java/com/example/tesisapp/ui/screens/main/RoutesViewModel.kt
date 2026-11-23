@@ -107,7 +107,11 @@ class RoutesViewModel @Inject constructor(
                 launch { taskRepository.refreshDefinitions(); visitaObservada = null; observarTareas(_uiState.value.activeStop) }
                 launch { salesRepository.syncProducts() }
                 launch { salesRepository.syncCampaigns() }
-                launch { salesRepository.syncSuggested(_uiState.value.stops.map { it.partnerId }.filter { it > 0 }) }
+                launch {
+                    // Se leen las paradas recién guardadas (el estado de la pantalla aún puede tener las anteriores)
+                    val ids = routeRepository.getTodayRoute().first()?.stops.orEmpty().map { it.partnerId }.filter { it > 0 }
+                    salesRepository.syncSuggested(ids)
+                }
             }
             _uiState.update {
                 it.copy(isSyncing = false, syncMessage = when {
@@ -173,6 +177,3 @@ class RoutesViewModel @Inject constructor(
         }
     }
 }
-
-/** Para el resumen de tareas: ¿la definición necesita foto? (se usa en la UI de tareas). */
-fun TaskType.esFoto() = this == TaskType.PHOTO

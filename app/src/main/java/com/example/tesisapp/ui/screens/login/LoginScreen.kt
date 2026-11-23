@@ -1,5 +1,7 @@
 package com.example.tesisapp.ui.screens.login
 
+import com.example.tesisapp.ui.theme.TesisColors
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -83,9 +85,9 @@ fun LoginScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color(0xFFFAFAFA),
+                    unfocusedContainerColor = TesisColors.Gris50,
                     focusedBorderColor = Color.Black,
-                    unfocusedBorderColor = Color(0xFFE0E0E0),
+                    unfocusedBorderColor = TesisColors.Gris300,
                     cursorColor = Color.Black,
                     focusedLabelColor = Color.Black,
                     unfocusedLabelColor = Color.Gray,
@@ -111,9 +113,9 @@ fun LoginScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color(0xFFFAFAFA),
+                    unfocusedContainerColor = TesisColors.Gris50,
                     focusedBorderColor = Color.Black,
-                    unfocusedBorderColor = Color(0xFFE0E0E0),
+                    unfocusedBorderColor = TesisColors.Gris300,
                     cursorColor = Color.Black,
                     focusedLabelColor = Color.Black,
                     unfocusedLabelColor = Color.Gray,

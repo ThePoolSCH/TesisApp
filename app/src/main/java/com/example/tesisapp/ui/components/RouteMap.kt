@@ -183,8 +183,9 @@ fun RouteMap(
 
             map.overlays.add(locationOverlay)
 
-            // Centrar SOLO UNA VEZ
-            locationOverlay.runOnFirstFix {
+            // Centrar en el vendedor SOLO si no hay ruta ni paradas que mostrar (F4: antes tapaba el zoom a la ruta)
+            val hayParadas = stops.any { it.latitude != 0.0 || it.longitude != 0.0 }
+            if (geoPoints.isEmpty() && !hayParadas) locationOverlay.runOnFirstFix {
                 if (!hasCenteredOnUser) {
                     hasCenteredOnUser = true
                     map.post {
@@ -195,10 +196,14 @@ fun RouteMap(
         }
 
         // F. ZOOM AUTOMÁTICO
-        if (geoPoints.isNotEmpty()) {
+        // Sin trazo de OSRM (p. ej., ruta generada sin conexión a OSRM) se encuadran las paradas
+        val encuadre = geoPoints.ifEmpty {
+            stops.filter { it.latitude != 0.0 || it.longitude != 0.0 }.map { GeoPoint(it.latitude, it.longitude) }
+        }
+        if (encuadre.size >= 2) {
             try {
                 // Hacemos zoom a la ruta restante
-                val boundingBox = BoundingBox.fromGeoPoints(geoPoints)
+                val boundingBox = BoundingBox.fromGeoPoints(encuadre)
                 // Agregamos un padding de 150px para que no quede pegado a los bordes
                 map.post { map.zoomToBoundingBox(boundingBox, true, 150) }
             } catch (e: Exception) { e.printStackTrace() }

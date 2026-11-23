@@ -154,9 +154,9 @@ fun TabItem(
     Box(
         modifier = modifier
             .fillMaxHeight()
+            .shadow(elevation = shadowElevation, shape = RoundedCornerShape(50), clip = false)
             .clip(RoundedCornerShape(50))
             .background(backgroundColor)
-            .shadow(elevation = shadowElevation, shape = RoundedCornerShape(50), clip = false)
             .clickable(indication = null, interactionSource = null) { onClick() }, // Sin efecto ripple
         contentAlignment = Alignment.Center
     ) {

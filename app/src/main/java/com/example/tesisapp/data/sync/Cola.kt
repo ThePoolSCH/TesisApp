@@ -42,7 +42,9 @@ class NetworkMonitor @Inject constructor(@ApplicationContext context: Context) {
     val online: StateFlow<Boolean> = callbackFlow {
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) { trySend(true) }
-            override fun onLost(network: Network) { trySend(ahora()) }
+            // Al perderse la red por defecto, `activeNetwork` aún puede devolverla un instante: se marca sin conexión
+            // y, si el sistema pasa a otra red, onAvailable vuelve a marcarla.
+            override fun onLost(network: Network) { trySend(false) }
             override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
                 trySend(caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))
             }

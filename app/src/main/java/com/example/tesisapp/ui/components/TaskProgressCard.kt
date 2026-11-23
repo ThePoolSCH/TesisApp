@@ -1,5 +1,7 @@
 package com.example.tesisapp.ui.components
 
+import com.example.tesisapp.ui.theme.TesisColors
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -21,7 +23,7 @@ fun TaskProgressCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         // COLOR GRIS CLARO DE FONDO
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+        colors = CardDefaults.cardColors(containerColor = TesisColors.Gris100),
         elevation = CardDefaults.cardElevation(0.dp) // Sin sombra para estilo "flat" minimalista
     ) {
         Column(modifier = Modifier.padding(20.dp)) {

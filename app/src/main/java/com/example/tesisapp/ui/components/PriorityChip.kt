@@ -1,5 +1,7 @@
 package com.example.tesisapp.ui.components
 
+import com.example.tesisapp.ui.theme.TesisColors
+
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -21,9 +23,9 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun PriorityChip(priority: String) {
     val (backgroundColor, textColor, icon) = when (priority) {
-        "Alta" -> Triple(Color(0xFFFFEBEE), Color(0xFFD32F2F), Icons.Default.ErrorOutline)
-        "Media" -> Triple(Color(0xFFFFF8E1), Color(0xFFF9A825), Icons.Default.WatchLater)
-        "Baja" -> Triple(Color(0xFFE8F5E9), Color(0xFF388E3C), Icons.Default.CheckCircleOutline)
+        "Alta" -> Triple(TesisColors.ErrorBg, TesisColors.Error, Icons.Default.ErrorOutline)
+        "Media" -> Triple(TesisColors.AvisoBg, TesisColors.AvisoFuerte, Icons.Default.WatchLater)
+        "Baja" -> Triple(TesisColors.OkBg, TesisColors.Ok, Icons.Default.CheckCircleOutline)
         else -> Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, Icons.Default.ErrorOutline)
     }
 

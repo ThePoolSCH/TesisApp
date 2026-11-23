@@ -76,7 +76,9 @@ fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modi
         contentPadding = PaddingValues(horizontal = 10.dp)
     ) {
         if (icon != null) { Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)) }
-        Text(text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1)
+        // softWrap = false: con maxLines = 1 el corte por palabra ocultaba el final ("Tareas 3/3" → "Tareas")
+        Text(text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, softWrap = false,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }
 

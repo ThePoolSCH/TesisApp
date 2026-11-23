@@ -74,6 +74,8 @@ fun TaskItemCard(
                 TaskType.NUMBER -> {
                     val inicial = (taskUiModel.answerValue as? Number)?.toDouble()?.let { Formato.numero(it, 2).trimEnd('0').trimEnd(',', '.') } ?: ""
                     var texto by remember(def.id) { mutableStateOf(inicial) }
+                    // Las respuestas guardadas llegan de la base después del primer dibujo
+                    LaunchedEffect(inicial) { if (texto.isEmpty() && inicial.isNotEmpty()) texto = inicial }
                     OutlinedTextField(
                         value = texto,
                         onValueChange = { t -> texto = t; onValueChange(leerNumero(t)) },
@@ -86,9 +88,13 @@ fun TaskItemCard(
                     )
                 }
                 TaskType.TEXT -> {
+                    // Estado local: si el campo leyera directo de la base (asíncrona), el cursor saltaría al inicio
+                    val guardado = (taskUiModel.answerValue as? String) ?: ""
+                    var texto by remember(def.id) { mutableStateOf(guardado) }
+                    LaunchedEffect(guardado) { if (texto.isEmpty() && guardado.isNotEmpty()) texto = guardado }
                     OutlinedTextField(
-                        value = (taskUiModel.answerValue as? String) ?: "",
-                        onValueChange = { onValueChange(it) }, enabled = enabled,
+                        value = texto,
+                        onValueChange = { texto = it; onValueChange(it) }, enabled = enabled,
                         modifier = Modifier.fillMaxWidth(), placeholder = { Text("Escribe aquí...") }, minLines = 2,
                         shape = MaterialTheme.shapes.small, colors = campoColores()
                     )

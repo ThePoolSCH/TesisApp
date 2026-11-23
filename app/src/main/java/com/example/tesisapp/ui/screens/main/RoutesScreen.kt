@@ -77,29 +77,14 @@ fun RoutesScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = TesisColors.Fondo,
-        floatingActionButton = {
-            // Durante la visita el botón tapaba "Finalizar visita" (hallazgo de los mockups): se oculta
-            if (activa == null) {
-                ExtendedFloatingActionButton(onClick = viewModel::onSyncPressed, containerColor = TesisColors.Negro,
-                    contentColor = TesisColors.Blanco) {
-                    if (uiState.isSyncing) {
-                        CircularProgressIndicator(Modifier.size(22.dp), color = TesisColors.Blanco, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp)); Text("Cargando...")
-                    } else {
-                        Icon(Icons.Default.Refresh, contentDescription = null)
-                        Spacer(Modifier.width(8.dp)); Text("Sincronizar")
-                    }
-                }
-            }
-        }
+        containerColor = TesisColors.Fondo
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item { RutaCard(uiState, permiso, onAbrirCartera) }
+            item { RutaCard(uiState, permiso, onAbrirCartera, viewModel::onSyncPressed) }
 
             item {
                 when {
@@ -131,7 +116,7 @@ fun RoutesScreen(
 }
 
 @Composable
-private fun RutaCard(s: RoutesUiState, permiso: Boolean, onAbrirCartera: () -> Unit) {
+private fun RutaCard(s: RoutesUiState, permiso: Boolean, onAbrirCartera: () -> Unit, onActualizar: () -> Unit) {
     TesisCard {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
@@ -140,12 +125,17 @@ private fun RutaCard(s: RoutesUiState, permiso: Boolean, onAbrirCartera: () -> U
                 Text(if (r != null) "${Formato.fechaCorta(r.date)} · ${r.stops.size} paradas" else "Sin ruta descargada",
                     color = TesisColors.Texto2)
             }
+            // Antes era un botón flotante que tapaba la tarjeta de validación; el envío de la cola ya va por el chip
+            IconButton(onClick = onActualizar, enabled = !s.isSyncing) {
+                if (s.isSyncing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = TesisColors.Negro)
+                else Icon(Icons.Default.Refresh, contentDescription = "Actualizar ruta")
+            }
             SecondaryButton("Cartera", onAbrirCartera, icon = Icons.Default.People, height = 40)
         }
         val r = s.routeInfo
         if (r == null) {
             Spacer(Modifier.height(12.dp))
-            Text(if (s.isLoading) "Cargando..." else "Presiona \"Sincronizar\" para obtener tus visitas.",
+            Text(if (s.isLoading || s.isSyncing) "Cargando..." else "Toca ↻ para descargar tus visitas.",
                 color = TesisColors.Texto2, style = MaterialTheme.typography.bodySmall)
             return@TesisCard
         }
@@ -199,7 +189,7 @@ private fun VisitaEnCursoCard(stop: RouteStop, s: RoutesUiState, onPedido: () ->
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SecondaryButton("Pedido", onPedido, Modifier.weight(1f), Icons.Default.ShoppingCart, height = 44)
             val t = s.tareas
-            SecondaryButton(if (t.total > 0) "Tareas ${t.hechas}/${t.total}" else "Tareas", onTareas, Modifier.weight(1f),
+            SecondaryButton(if (t.total > 0) "${t.hechas}/${t.total}" else "Tareas", onTareas, Modifier.weight(1f),
                 Icons.Default.CheckBox, height = 44)
             SecondaryButton("Historial", onHistorial, Modifier.weight(1f), Icons.Default.History, height = 44,
                 enabled = stop.partnerId > 0)
