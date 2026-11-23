@@ -1,58 +1,52 @@
 package com.example.tesisapp.ui.theme
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
+/** Radios de esquina estándar (8 / 12 / 16 dp, como `--r-s/m/l` de los mockups). */
+object TesisShapes {
+    val S = RoundedCornerShape(8.dp)
+    val M = RoundedCornerShape(12.dp)
+    val L = RoundedCornerShape(16.dp)
+    val Pill = RoundedCornerShape(999.dp)
+}
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+// Un solo esquema claro: la app es una herramienta de trabajo en la calle (sol directo) y su estilo es
+// negro sobre blanco. Se quitó el color dinámico (Android 12+) y la paleta morada de la plantilla.
+private val Esquema = lightColorScheme(
+    primary = TesisColors.Negro,
+    onPrimary = TesisColors.Blanco,
+    primaryContainer = TesisColors.Gris200,
+    onPrimaryContainer = TesisColors.Negro,
+    secondary = TesisColors.Texto2,
+    onSecondary = TesisColors.Blanco,
+    secondaryContainer = TesisColors.Gris100,
+    onSecondaryContainer = TesisColors.Negro,
+    background = TesisColors.Fondo,
+    onBackground = TesisColors.Texto,
+    surface = TesisColors.Superficie,
+    onSurface = TesisColors.Texto,
+    surfaceVariant = TesisColors.Gris100,
+    onSurfaceVariant = TesisColors.Texto2,
+    surfaceContainer = TesisColors.Superficie,
+    surfaceContainerLow = TesisColors.Superficie,
+    surfaceContainerHigh = TesisColors.Superficie,
+    outline = TesisColors.Gris300,
+    outlineVariant = TesisColors.Gris200,
+    error = TesisColors.Error,
+    errorContainer = TesisColors.ErrorBg,
 )
 
 @Composable
-fun TesisAppTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
+fun TesisAppTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = Esquema,
         typography = Typography,
+        shapes = Shapes(small = TesisShapes.S, medium = TesisShapes.M, large = TesisShapes.L),
         content = content
     )
 }

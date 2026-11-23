@@ -15,7 +15,8 @@ data class ProductDto(
     val code: String,
     val price: Double,
     @SerializedName("uom_name") val uomName: String,
-    @SerializedName("image_url") val imageUrl: String
+    @SerializedName("image_url") val imageUrl: String,
+    @SerializedName("category") val category: String? = null
 )
 
 data class CampaignDto(

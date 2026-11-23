@@ -13,6 +13,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import com.example.tesisapp.ui.theme.TesisColors
+import com.example.tesisapp.utils.Formato
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,7 +54,7 @@ fun ProductCard(
                         modifier = Modifier
                             .size(60.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFF5F5F5)),
+                            .background(TesisColors.Gris100),
                         contentScale = ContentScale.Crop
                     )
 
@@ -70,10 +72,18 @@ fun ProductCard(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = product.code, // Usamos el código como subtítulo
+                            text = listOf(product.code, product.category).filter { it.isNotBlank() }.joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
+                            color = TesisColors.Texto2
                         )
+                        productModel.suggestion?.let { sug ->
+                            Text(
+                                text = "Sugerido: ${sug.qty} · ${sug.reason}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TesisColors.Info
+                            )
+                        }
                     }
                 }
 
@@ -87,7 +97,7 @@ fun ProductCard(
                 ) {
                     // Precio Grande
                     Text(
-                        text = "$${product.price}",
+                        text = Formato.pen(product.price),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black
@@ -143,7 +153,7 @@ fun ProductCard(
             // TAG DE META (Posicionado Absolutamente a la derecha)
             if (target != null) {
                 Surface(
-                    color = MaterialTheme.colorScheme.tertiaryContainer, // Color pastel (lila/rosa)
+                    color = TesisColors.Negro,
                     shape = RoundedCornerShape(bottomStart = 12.dp, topEnd = 16.dp), // Esquina redondeada opuesta
                     modifier = Modifier.align(Alignment.TopEnd)
                 ) {
@@ -151,7 +161,7 @@ fun ProductCard(
                         text = "Meta: ${target.currentAmount.toInt()}/${target.targetAmount.toInt()}",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        color = TesisColors.Blanco,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
@@ -184,8 +194,8 @@ fun OrderItemCard(
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(product.name, style = MaterialTheme.typography.bodyLarge)
-                Text("$ ${product.price} x $quantity", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-                Text("Subtotal: $ ${String.format("%.2f", product.price * quantity)}", style = MaterialTheme.typography.titleSmall)
+                Text("${Formato.pen(product.price)} x $quantity", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                Text("Subtotal: ${Formato.pen(product.price * quantity)}", style = MaterialTheme.typography.titleSmall)
             }
             IconButton(onClick = { onQuantityChanged(-1) }) {
                 Icon(Icons.Default.Remove, contentDescription = "Quitar")

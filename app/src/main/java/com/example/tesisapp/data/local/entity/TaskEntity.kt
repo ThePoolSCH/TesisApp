@@ -10,17 +10,19 @@ data class TaskDefinitionEntity(
     @PrimaryKey(autoGenerate = false)
     val id: Int,
     val question: String,
-    val type: String, // Guardamos como String: "bool" o "text"
+    val type: String, // bool / text / number / selection / photo (como en Odoo)
     val isRequired: Boolean,
-    val sequence: Int // Útil para ordenar
+    val sequence: Int,
+    // F4
+    val options: String = "",       // separadas por "|"
+    val unit: String = "",
+    val clientType: String = "",
+    val originKind: String = "all",
+    val originLabel: String = ""
 ) {
-    // Mapper de Entidad a Dominio
-    fun toDomain(): TaskDefinition {
-        return TaskDefinition(
-            id = id,
-            question = question,
-            type = if (type == "bool") TaskType.BOOLEAN else TaskType.TEXT,
-            isRequired = isRequired
-        )
-    }
+    fun toDomain() = TaskDefinition(
+        id = id, question = question, type = TaskType.from(type), isRequired = isRequired,
+        options = options.split("|").filter { it.isNotBlank() }, unit = unit, clientType = clientType,
+        originKind = originKind, originLabel = originLabel.ifBlank { "Todas las visitas" }
+    )
 }

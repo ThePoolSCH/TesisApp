@@ -10,8 +10,9 @@ import com.example.tesisapp.data.local.dao.LocationDao
 import com.example.tesisapp.data.local.dao.TaskDao
 import com.example.tesisapp.data.local.entity.TaskDefinitionEntity
 @Database(
-    entities = [UserEntity::class, ProductEntity::class, LocationEntity::class, TaskDefinitionEntity::class, RouteEntity::class, StopEntity::class, CampaignEntity::class, CampaignTargetEntity::class],
-    version = 51,
+    entities = [UserEntity::class, ProductEntity::class, LocationEntity::class, TaskDefinitionEntity::class, RouteEntity::class, StopEntity::class, CampaignEntity::class, CampaignTargetEntity::class,
+        PendingOpEntity::class, TaskDraftEntity::class, SuggestedEntity::class, CacheEntity::class],
+    version = 52, // F4: cola, borradores de tareas, pedido sugerido, caché; nuevos campos de parada y tarea
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -21,4 +22,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
     abstract fun routeDao(): RouteDao
     abstract fun salesDao(): SalesDao
+    abstract fun colaDao(): com.example.tesisapp.data.local.dao.ColaDao
 }

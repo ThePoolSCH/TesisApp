@@ -10,12 +10,24 @@ import com.example.tesisapp.utils.Resource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.io.IOException
+import java.util.UUID
+import com.example.tesisapp.data.local.dao.ColaDao
+import com.example.tesisapp.data.remote.OdooRpc
+import com.example.tesisapp.data.remote.RpcResult
+import com.example.tesisapp.data.sync.OutboxRepository
+import com.example.tesisapp.utils.Formato
+import com.google.gson.Gson
+import com.google.gson.JsonParser
 import java.net.URI
 
 class SalesRepositoryImpl(
     private val api: SalesApi,
-    private val dao: SalesDao
+    private val dao: SalesDao,
+    private val cola: ColaDao,
+    private val rpc: OdooRpc,
+    private val outbox: OutboxRepository
 ) : SalesRepository {
+    private val gson = Gson()
     private val apiBaseUri = URI(BuildConfig.API_BASE_URL)
     private val apiHost = apiBaseUri.host?.lowercase().orEmpty()
     private val apiPort = if (apiBaseUri.port == -1) null else apiBaseUri.port
@@ -56,7 +68,8 @@ class SalesRepositoryImpl(
                         dto.code,
                         dto.price,
                         dto.uomName,
-                        resolveAssetUrl(dto.imageUrl)
+                        resolveAssetUrl(dto.imageUrl),
+                        dto.category.orEmpty()
                     )
                 }
                 allProducts.addAll(batch)
@@ -112,7 +125,7 @@ class SalesRepositoryImpl(
     // ... getProducts y getCampaigns (Flows) QUEDAN IGUAL ...
     override fun getProducts(): Flow<List<Product>> {
         return dao.getAllProducts().map { entities ->
-            entities.map { Product(it.id, it.name, it.code, it.price, it.uomName, it.imageUrl) }
+            entities.map { Product(it.id, it.name, it.code, it.price, it.uomName, it.imageUrl, it.category) }
         }
     }
 
@@ -137,28 +150,41 @@ class SalesRepositoryImpl(
         }
     }
 
-    override suspend fun createOrder(routeLineId: Int, items: List<OrderItem>): Resource<Int> {
-        return try {
-            val payloadProducts = items.map {
-                mapOf("product_id" to it.productId, "qty" to it.quantity)
-            }
-            val request = OdooJsonRpcRequest(
-                params = mapOf(
-                    "route_line_id" to routeLineId,
-                    "products" to payloadProducts
-                )
-            )
-            val rpcResponse = api.createOrder(request)
-            val innerResponse = rpcResponse.result // <--- Desempaquetamos
+    override suspend fun createOrder(routeLineId: Int, partnerName: String, items: List<OrderItem>, total: Double) {
+        val payload = mapOf(
+            "route_line_id" to routeLineId,
+            "products" to items.map { mapOf("product_id" to it.productId, "qty" to it.quantity) },
+            "client_uuid" to UUID.randomUUID().toString(), // el servidor no lo duplica si la cola lo reenvía
+            "timestamp" to Formato.utcAhora()
+        )
+        outbox.encolar(PendingOpEntity.ORDER, routeLineId, "Pedido ${Formato.pen(total)} · $partnerName", payload)
+    }
 
-            if (innerResponse != null && innerResponse.status == "success" && innerResponse.data != null) {
-                Resource.Success(innerResponse.data.orderId)
-            } else {
-                Resource.Error(innerResponse?.message ?: "Error creando pedido")
+    override suspend fun syncSuggested(partnerIds: List<Int>): Resource<Unit> {
+        if (partnerIds.isEmpty()) return Resource.Success(Unit)
+        return when (val r = rpc.call("/api/sales/suggested", mapOf("partner_ids" to partnerIds))) {
+            is RpcResult.Ok -> {
+                val filas = r.data?.takeIf { it.isJsonArray }?.asJsonArray ?: return Resource.Success(Unit)
+                cola.upsertSuggested(filas.map { e ->
+                    val o = e.asJsonObject
+                    SuggestedEntity(o.get("partner_id").asInt, o.get("items").toString(), o.get("avg_ticket")?.asDouble ?: 0.0)
+                })
+                Resource.Success(Unit)
             }
-        } catch (e: Exception) {
-            Resource.Error("Error de red: ${e.message}")
+            is RpcResult.Rechazo -> Resource.Error(r.message)
+            is RpcResult.SinRed -> Resource.Error("Sin conexión")
+            RpcResult.SesionVencida -> Resource.Error("Sesión vencida")
         }
+    }
+
+    override suspend fun getSuggested(partnerId: Int): SuggestedOrder? {
+        val e = cola.suggested(partnerId) ?: return null
+        val items = JsonParser.parseString(e.itemsJson).asJsonArray.map { x ->
+            val o = x.asJsonObject
+            SuggestedItem(o.get("product_id").asInt, o.get("name").asString, o.get("qty").asInt,
+                o.get("reason").asString, o.get("campaign")?.asBoolean ?: false)
+        }
+        return SuggestedOrder(items, e.avgTicket)
     }
 
     private fun resolveAssetUrl(raw: String): String {

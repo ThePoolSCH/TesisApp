@@ -2,44 +2,33 @@ package com.example.tesisapp.ui.screens.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tesisapp.domain.model.RouteStop
+import com.example.tesisapp.domain.model.TaskAnswer
 import com.example.tesisapp.domain.model.TaskDefinition
 import com.example.tesisapp.domain.model.TaskType
 import com.example.tesisapp.domain.repository.TaskRepository
 import com.example.tesisapp.ui.screens.tasks.TaskUiModel
+import com.example.tesisapp.utils.Formato
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 data class TasksUiState(
     val isLoading: Boolean = false,
-    val activeRouteLineId: Int? = null,
-
-    // Datos crudos
+    val stop: RouteStop? = null,
     val definitions: List<TaskDefinition> = emptyList(),
-    val answersMap: Map<Int, Any> = emptyMap(), // ID -> Valor
-
-    val errorMessage: String? = null,
-    val isSaving: Boolean = false,
-    val isSavedSuccess: Boolean = false
+    val answers: Map<Int, TaskAnswer> = emptyMap(),
+    val enviadas: Boolean = false,
+    val message: String? = null
 ) {
-    // LÓGICA DE ORDENAMIENTO AQUI
-    // Primero filtramos y concatenamos para asegurar que BOOLEAN salga antes que TEXT
-    val taskList: List<TaskUiModel> get() {
-        val mappedList = definitions.map { def ->
-            TaskUiModel(def, answersMap[def.id])
-        }
-
-        // Ordenar: Primero Boolean, luego Texto. Dentro de cada grupo, por ID o secuencia original
-        return mappedList.sortedWith(compareBy(
-            { it.definition.type != TaskType.BOOLEAN }, // False (0) va primero (Boolean), True (1) va despues
-            { it.definition.id }
-        ))
-    }
-
+    val taskList: List<TaskUiModel> get() = definitions.map { TaskUiModel(it, answers[it.id]) }
     val totalTasks: Int get() = definitions.size
     val completedTasks: Int get() = taskList.count { it.isAnswered }
-    val progress: Float get() = if (totalTasks > 0) completedTasks.toFloat() / totalTasks.toFloat() else 0f
+    val progress: Float get() = if (totalTasks > 0) completedTasks / totalTasks.toFloat() else 0f
+    val faltan: List<TaskDefinition> get() = taskList.filter { it.definition.isRequired && !it.isAnswered }.map { it.definition }
 }
 
 @HiltViewModel
@@ -49,58 +38,61 @@ class TasksViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(TasksUiState())
     val uiState = _uiState.asStateFlow()
+    private var job: Job? = null
 
-    // Igual que en ProductsViewModel
-    fun setRouteLineId(id: Int) {
-        if (_uiState.value.activeRouteLineId != id) {
-            _uiState.update { it.copy(activeRouteLineId = id) }
-            loadTasks()
+    /** Tareas de la parada en curso: las generales, las de sus campañas y las de su tipo de cliente (sin conexión). */
+    fun setStop(stop: RouteStop) {
+        if (_uiState.value.stop?.id == stop.id) return
+        job?.cancel()
+        _uiState.update { TasksUiState(isLoading = true, stop = stop) }
+        job = viewModelScope.launch {
+            var defs = taskRepository.definitionsFor(stop.clientType)
+            if (defs.isEmpty()) { taskRepository.refreshDefinitions(); defs = taskRepository.definitionsFor(stop.clientType) }
+            _uiState.update { it.copy(isLoading = false, definitions = defs) }
+            taskRepository.observeAnswers(stop.id).collect { (answers, enviadas) ->
+                _uiState.update { it.copy(answers = answers.associateBy { a -> a.definitionId }, enviadas = enviadas) }
+            }
         }
     }
 
-    private fun loadTasks() {
+    fun onAnswerChanged(def: TaskDefinition, value: Any?) {
+        val stop = _uiState.value.stop ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-
-            taskRepository.getTasks()
-                .onSuccess { tasks ->
-                    _uiState.update { it.copy(isLoading = false, definitions = tasks) }
-                }
-                .onFailure { e ->
-                    _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
-                }
+            val vacio = value == null || (value is String && value.isEmpty())
+            if (vacio) taskRepository.clearAnswer(stop.id, def.id)
+            else taskRepository.saveAnswer(stop.id, TaskAnswer(def.id, value))
         }
     }
 
-    fun onAnswerChanged(taskDef: TaskDefinition, newValue: Any) {
-        val currentMap = _uiState.value.answersMap.toMutableMap()
-
-        // Lógica específica según tipo
-        when (taskDef.type) {
-            TaskType.BOOLEAN -> currentMap[taskDef.id] = newValue as Boolean
-            TaskType.TEXT -> currentMap[taskDef.id] = newValue as String
+    /** Foto recién tomada: se comprime (en la pantalla) y se guarda con su hora y posición. */
+    fun onFotoTomada(def: TaskDefinition, archivo: File, kb: Int, lat: Double?, lon: Double?) {
+        val stop = _uiState.value.stop ?: return
+        viewModelScope.launch {
+            _uiState.value.answers[def.id]?.value?.let { anterior -> if (anterior is String && anterior != archivo.path) File(anterior).delete() }
+            taskRepository.saveAnswer(stop.id, TaskAnswer(def.id, archivo.path, Formato.utcAhora(), lat, lon, kb))
         }
-
-        _uiState.update { it.copy(answersMap = currentMap) }
     }
 
     fun submitAnswers() {
-        val visitId = _uiState.value.activeRouteLineId ?: return
-
+        val s = _uiState.value
+        val stop = s.stop ?: return
+        if (s.faltan.isNotEmpty()) {
+            _uiState.update { it.copy(message = "Completa: " + s.faltan.joinToString(", ") { d -> d.question }) }
+            return
+        }
         viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true) }
-
-            taskRepository.submitTasks(visitId, _uiState.value.answersMap)
-                .onSuccess {
-                    _uiState.update { it.copy(isSaving = false, isSavedSuccess = true) }
-                }
-                .onFailure { e ->
-                    _uiState.update { it.copy(isSaving = false, errorMessage = e.message) }
-                }
+            taskRepository.submit(stop.id, stop.partnerName, s.answers.values.toList(), s.definitions)
+            _uiState.update { it.copy(message = "Respuestas guardadas. Se enviarán a Odoo en cuanto haya conexión.") }
         }
     }
 
-    fun resetSuccessStatus() {
-        _uiState.update { it.copy(isSavedSuccess = false) }
-    }
+    fun clearMessage() = _uiState.update { it.copy(message = null) }
+}
+
+/** Valor de una respuesta numérica tal como se escribe ("2,80" → 2.8). */
+fun leerNumero(texto: String): Double? = texto.replace(',', '.').toDoubleOrNull()
+
+fun TaskType.etiqueta() = when (this) {
+    TaskType.BOOLEAN -> "Sí/No"; TaskType.TEXT -> "Texto"; TaskType.NUMBER -> "Número"
+    TaskType.SELECTION -> "Opciones"; TaskType.PHOTO -> "Foto"
 }

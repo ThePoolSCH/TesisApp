@@ -19,6 +19,11 @@ import com.example.tesisapp.domain.repository.TaskRepository
 import com.example.tesisapp.domain.repository.AuthRepository
 import com.example.tesisapp.data.remote.OdooApiService
 import com.example.tesisapp.data.remote.SalesApi
+import com.example.tesisapp.data.remote.OdooRpc
+import com.example.tesisapp.data.remote.OdooRpcService
+import com.example.tesisapp.data.remote.PersistentCookieJar
+import com.example.tesisapp.data.local.dao.ColaDao
+import com.example.tesisapp.data.sync.OutboxRepository
 import com.example.tesisapp.data.repository.RouteRepositoryImpl
 import com.example.tesisapp.data.repository.SalesRepositoryImpl
 import com.example.tesisapp.domain.repository.RouteRepository
@@ -30,12 +35,10 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
-import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import java.net.CookieManager
 import java.util.concurrent.TimeUnit
 
 // 1. MÓDULO DE PROVEEDORES
@@ -76,20 +79,27 @@ object AppModule {
     @Singleton
     fun provideSalesDao(db: AppDatabase): SalesDao = db.salesDao()
 
+    @Provides
+    @Singleton
+    fun provideColaDao(db: AppDatabase): ColaDao = db.colaDao()
+
     // --- RED (RETROFIT & ODOO) ---
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
+    fun provideCookieJar(@ApplicationContext context: Context): PersistentCookieJar = PersistentCookieJar(context)
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(cookieJar: PersistentCookieJar): OkHttpClient {
         val logging = HttpLoggingInterceptor()
         logging.setLevel(HttpLoggingInterceptor.Level.BASIC)
-        val cookieHandler = CookieManager()
 
         return OkHttpClient.Builder()
-            .cookieJar(JavaNetCookieJar(cookieHandler))
+            .cookieJar(cookieJar) // F4: la sesión sobrevive al cierre de la app (cola sin conexión)
             .addInterceptor(logging)
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS) // las fotos de tareas tardan más en subir
             .build()
     }
 
@@ -112,6 +122,10 @@ object AppModule {
         return retrofit.create(OdooApiService::class.java)
     }
 
+    @Provides
+    @Singleton
+    fun provideOdooRpcService(retrofit: Retrofit): OdooRpcService = retrofit.create(OdooRpcService::class.java)
+
     // 3. SalesApi ahora funciona porque ya existe "provideRetrofit" arriba
     @Provides
     @Singleton
@@ -123,8 +137,8 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideSalesRepository(api: SalesApi, dao: SalesDao): SalesRepository {
-        return SalesRepositoryImpl(api, dao)
+    fun provideSalesRepository(api: SalesApi, dao: SalesDao, cola: ColaDao, rpc: OdooRpc, outbox: OutboxRepository): SalesRepository {
+        return SalesRepositoryImpl(api, dao, cola, rpc, outbox)
     }
 }
 

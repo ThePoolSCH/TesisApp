@@ -5,266 +5,206 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.tesisapp.domain.model.RouteStop
-import com.example.tesisapp.ui.components.FinishVisitDialog
-import com.example.tesisapp.ui.components.LocationCard
-import com.example.tesisapp.ui.components.LocationValidationCard
-import com.example.tesisapp.ui.components.RouteMap // Importamos nuestro componente de mapa
-import android.annotation.SuppressLint
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.graphics.Color
+import com.example.tesisapp.ui.components.*
+import com.example.tesisapp.ui.theme.TesisColors
+import com.example.tesisapp.utils.Formato
 import com.google.android.gms.location.LocationServices
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import com.google.android.gms.location.Priority
 
 @Composable
-fun RoutesScreen(viewModel: RoutesViewModel) {
+fun RoutesScreen(
+    viewModel: RoutesViewModel,
+    onAbrirPedido: () -> Unit,
+    onAbrirTareas: () -> Unit,
+    onAbrirCliente: (Int) -> Unit,
+    onAbrirCartera: () -> Unit
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    val fused = remember { LocationServices.getFusedLocationProviderClient(context) }
+    var permiso by remember { mutableStateOf(false) }
 
-    val handleMainButtonClick: () -> Unit = {
+    // Ubicación actual: la última conocida al instante y una lectura fresca de alta precisión
+    fun conUbicacion(accion: (Double, Double) -> Unit) {
         try {
-            // Verificar permisos antes de pedir ubicación (aunque ya deberías tenerlos por el mapa)
-            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                if (location != null) {
-                    viewModel.onMainButtonClick(location.latitude, location.longitude)
-                } else {
-                    viewModel.onLocationUnavailable()
-                }
-            }
+            fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                .addOnSuccessListener { loc -> if (loc != null) accion(loc.latitude, loc.longitude) else viewModel.onLocationUnavailable() }
+                .addOnFailureListener { viewModel.onLocationUnavailable() }
         } catch (e: SecurityException) {
             viewModel.onLocationUnavailable()
         }
     }
 
-    // --- GESTIÓN DE PERMISOS DE UBICACIÓN ---
-    var isLocationPermissionGranted by remember { mutableStateOf(false) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        // Verificamos si alguno de los permisos de ubicación fue concedido
-        isLocationPermissionGranted =
-            permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                    permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { p ->
+        permiso = p[Manifest.permission.ACCESS_FINE_LOCATION] == true || p[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (permiso) conUbicacion(viewModel::onUbicacion)
     }
-
-    // Pedir permiso al iniciar la pantalla
     LaunchedEffect(Unit) {
-        permissionLauncher.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
-        )
+        permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
-
-    // --- SNACKBAR SYNC ---
     LaunchedEffect(uiState.syncMessage) {
-        uiState.syncMessage?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.clearSyncMessage()
-        }
+        uiState.syncMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearSyncMessage() }
     }
 
-    // --- DIÁLOGOS ---
-    if (uiState.showFinishDialog) {
-        FinishVisitDialog(
-            locationName = uiState.activeVisitLocation?.name ?: "Ubicación desconocida",
-            onDismiss = viewModel::onDismissFinishDialog,
-            onConfirm = viewModel::onConfirmFinishVisit,
-            onReportIncident = viewModel::onReportIncident
+    uiState.fueraDeRango?.let { f ->
+        FueraDeRangoSheet(f.stop.partnerName, f.distanciaM, f.radioM, viewModel::onCerrarFueraDeRango, viewModel::onRegistrarFueraDeRango)
+    }
+    val activa = uiState.activeStop
+    if (uiState.showFinishSheet && activa != null) {
+        TerminarVisitaSheet(
+            nombre = activa.partnerName,
+            minutos = if (activa.checkinAt > 0) (System.currentTimeMillis() - activa.checkinAt) / 60000 else 0,
+            vendido = activa.totalSold, tareasHechas = uiState.tareas.hechas, tareasTotal = uiState.tareas.total,
+            obligatoriasFaltan = uiState.tareas.obligatoriasFaltan,
+            onCancelar = viewModel::onDismissFinish, onFinalizar = viewModel::onConfirmarFin
         )
     }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = TesisColors.Fondo,
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { viewModel.onSyncPressed() },
-                containerColor = Color.Black,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            ) {
-                if (uiState.isSyncing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Cargando...")
-                } else {
-                    Icon(Icons.Default.Refresh, contentDescription = "Sync", tint = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Sincronizar", color = Color.White)
+            // Durante la visita el botón tapaba "Finalizar visita" (hallazgo de los mockups): se oculta
+            if (activa == null) {
+                ExtendedFloatingActionButton(onClick = viewModel::onSyncPressed, containerColor = TesisColors.Negro,
+                    contentColor = TesisColors.Blanco) {
+                    if (uiState.isSyncing) {
+                        CircularProgressIndicator(Modifier.size(22.dp), color = TesisColors.Blanco, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp)); Text("Cargando...")
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(8.dp)); Text("Sincronizar")
+                    }
                 }
             }
         }
     ) { padding ->
-
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+            Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item { RutaCard(uiState, permiso, onAbrirCartera) }
 
-            // --- SECCIÓN 0: MAPA Y CABECERA ---
             item {
-                if (uiState.routeInfo != null) {
-                    RouteMapHeader(
-                        routeName = "Ruta",
-                        routeDate = uiState.routeInfo!!.date,
-                        geometry = uiState.routeInfo!!.geometry,
-                        stops = uiState.routeInfo!!.stops,
-                        isLocationEnabled = isLocationPermissionGranted
-                    )
-                } else {
-                    // Estado vacío (sin sincronizar)
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color.White   // MISMO fondo blanco del otro componente
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text("No hay ruta cargada.", style = MaterialTheme.typography.bodyLarge)
-                            Text("Presiona 'Sincronizar' para obtener tus visitas.", style = MaterialTheme.typography.bodySmall)
-                        }
+                when {
+                    uiState.routeInfo == null -> {}
+                    activa != null -> VisitaEnCursoCard(activa, uiState, onAbrirPedido, onAbrirTareas,
+                        { onAbrirCliente(activa.partnerId) }, viewModel::onFinalizarClick)
+                    uiState.nextStop != null -> ValidarLlegadaCard(uiState.nextStop!!, uiState) {
+                        conUbicacion(viewModel::onValidarLlegada)
                     }
+                    else -> TesisCard { EmptyState(Icons.Default.TaskAlt, "Ruta del día terminada", "Visitaste todas las paradas.") }
                 }
             }
 
-            // --- SECCIÓN 1: VALIDAR UBICACIÓN ---
-            item {
-                LocationValidationCard(
-                    onButtonClick = handleMainButtonClick, // <--- USAMOS LA NUEVA FUNCIÓN
-                    activeVisitLocation = uiState.activeVisitLocation,
-                    hasPendingLocations = uiState.locations.any { it.status == "Pendiente" }
-                )
-            }
-
-            // --- SECCIÓN 2: LISTA DE UBICACIONES ---
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Storefront,
-                                contentDescription = "Ubicaciones",
-                                tint = Color.Black
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Ubicaciones por Visitar",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.Black
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (uiState.isLoading) {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().height(40.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator()
-                            }
-                        } else if (uiState.locations.isEmpty()) {
-                            Text("No hay clientes en la lista.", style = MaterialTheme.typography.bodyMedium)
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                uiState.locations.forEachIndexed { index, location ->
-                                    LocationCard(location = location, index = index)
-                                }
-                            }
-                        }
+            if (uiState.stops.isNotEmpty()) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Storefront, null, Modifier.size(28.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Ubicaciones por Visitar", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                     }
                 }
+                itemsIndexed(uiState.stops, key = { _, s -> s.id }) { i, s ->
+                    StopCard(s, i, isNext = activa == null && s.id == uiState.nextStop?.id)
+                }
             }
-
-            // Espacio extra al final
-            item { Spacer(modifier = Modifier.height(64.dp)) }
+            item { Spacer(Modifier.height(72.dp)) }
         }
     }
 }
 
-// --- COMPOSABLE HEADER DEL MAPA ---
 @Composable
-fun RouteMapHeader(
-    routeName: String,
-    routeDate: String,
-    geometry: List<List<Double>>,
-    stops: List<RouteStop>,
-    isLocationEnabled: Boolean
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = routeName,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.Black
-                    )
-                    Text(
-                        text = routeDate,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
-                    )
-                }
-                Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(32.dp), tint = Color.Black)
+private fun RutaCard(s: RoutesUiState, permiso: Boolean, onAbrirCartera: () -> Unit) {
+    TesisCard {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                Text("Ruta", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
+                val r = s.routeInfo
+                Text(if (r != null) "${Formato.fechaCorta(r.date)} · ${r.stops.size} paradas" else "Sin ruta descargada",
+                    color = TesisColors.Texto2)
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Contenedor del Mapa
-            Card(
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(300.dp) // Altura generosa para ver bien
-            ) {
-                // Aquí llamamos al componente de OSMDroid
-                RouteMap(
-                    modifier = Modifier.fillMaxSize(),
-                    geometry = geometry,
-                    stops = stops,
-                    isUserLocationEnabled = isLocationEnabled
-                )
-            }
+            SecondaryButton("Cartera", onAbrirCartera, icon = Icons.Default.People, height = 40)
         }
+        val r = s.routeInfo
+        if (r == null) {
+            Spacer(Modifier.height(12.dp))
+            Text(if (s.isLoading) "Cargando..." else "Presiona \"Sincronizar\" para obtener tus visitas.",
+                color = TesisColors.Texto2, style = MaterialTheme.typography.bodySmall)
+            return@TesisCard
+        }
+        Spacer(Modifier.height(12.dp))
+        ProgresoRuta(s.hechas, r.stops.size)
+        Spacer(Modifier.height(12.dp))
+        Card(shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth().height(280.dp)) {
+            RouteMap(modifier = Modifier.fillMaxSize(), geometry = r.geometry, stops = r.stops, isUserLocationEnabled = permiso)
+        }
+    }
+}
+
+@Composable
+private fun ValidarLlegadaCard(next: RouteStop, s: RoutesUiState, onValidar: () -> Unit) {
+    TesisCard {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.LocationOn, null)
+                Spacer(Modifier.width(4.dp))
+                Text("Validación de Ubicación", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(6.dp))
+            Text("Próxima parada: ${next.partnerName}", fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+            val d = s.distanciaA(next)
+            val partes = listOfNotNull(
+                d?.let { if (it >= 1000) "Estás a ${Formato.numero(it / 1000, 1)} km" else "Estás a ${Formato.numero(it)} m" },
+                next.plannedArrival.takeIf { it.isNotBlank() }?.let { "llegada estimada $it" }
+            )
+            if (partes.isNotEmpty()) Text(partes.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = TesisColors.Texto2)
+            Spacer(Modifier.height(12.dp))
+            PrimaryButton("Validar llegada", onValidar, icon = Icons.Default.CheckCircle)
+            Text("Sin conexión la llegada se valida con el GPS y se envía después.",
+                style = MaterialTheme.typography.labelSmall, color = TesisColors.Texto2, modifier = Modifier.padding(top = 6.dp))
+        }
+    }
+}
+
+@Composable
+private fun VisitaEnCursoCard(stop: RouteStop, s: RoutesUiState, onPedido: () -> Unit, onTareas: () -> Unit,
+                              onHistorial: () -> Unit, onFinalizar: () -> Unit) {
+    TesisCard {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { Cronometro(stop.checkinAt) }
+        Spacer(Modifier.height(10.dp))
+        Text("Estás visitando a:", color = TesisColors.Texto2)
+        Text(stop.partnerName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        val detalle = listOf(stop.street, Formato.tipoCliente(stop.clientType),
+            stop.visitClass.takeIf { it.isNotBlank() }?.let { "clase $it" } ?: "",
+            if (stop.outOfRange) "llegada fuera de rango" else "").filter { it.isNotBlank() }.joinToString(" · ")
+        Text(detalle, style = MaterialTheme.typography.bodySmall, color = if (stop.outOfRange) TesisColors.Aviso else TesisColors.Texto2)
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton("Pedido", onPedido, Modifier.weight(1f), Icons.Default.ShoppingCart, height = 44)
+            val t = s.tareas
+            SecondaryButton(if (t.total > 0) "Tareas ${t.hechas}/${t.total}" else "Tareas", onTareas, Modifier.weight(1f),
+                Icons.Default.CheckBox, height = 44)
+            SecondaryButton("Historial", onHistorial, Modifier.weight(1f), Icons.Default.History, height = 44,
+                enabled = stop.partnerId > 0)
+        }
+        Spacer(Modifier.height(12.dp))
+        PrimaryButton("Finalizar visita", onFinalizar, icon = Icons.Default.Stop)
     }
 }

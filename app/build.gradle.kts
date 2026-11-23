@@ -105,6 +105,12 @@ dependencies {
     // Coil 2.x ya usa OkHttp; "coil-network-okhttp" es un artefacto de Coil 3 (io.coil-kt.coil3) y no existe en 2.4.0
 
     implementation("androidx.compose.material:material-icons-extended:1.6.8")
+
+    // F4: cola sin conexión (WorkManager con Hilt) y fotos de tareas (orientación EXIF)
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
 }
 
 fun resolveDbName(): String {

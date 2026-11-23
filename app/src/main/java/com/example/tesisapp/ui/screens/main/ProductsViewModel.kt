@@ -1,237 +1,150 @@
 package com.example.tesisapp.ui.screens.main
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tesisapp.domain.model.CampaignTarget
-import com.example.tesisapp.domain.model.OrderItem
-import com.example.tesisapp.domain.model.Product
+import com.example.tesisapp.domain.model.*
+import com.example.tesisapp.domain.repository.RouteRepository
+import com.example.tesisapp.domain.repository.SalesRepository
 import com.example.tesisapp.domain.use_case.*
-import com.example.tesisapp.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class ProductTab { CATALOG, ORDER }
-enum class OrderStatus { IDLE, PROCESSING, SUCCESS, ERROR }
+enum class OrderStatus { IDLE, SUCCESS, ERROR }
 
-// Modelo de UI que combina el Producto base con su información de Meta (si existe)
+// Modelo de UI: producto + su meta de campaña (si tiene) + si está en el pedido sugerido del cliente
 data class ProductUiModel(
     val product: Product,
-    val targetInfo: CampaignTarget? = null // Si es null, no es parte de una campaña activa
+    val targetInfo: CampaignTarget? = null,
+    val suggestion: SuggestedItem? = null
 )
+
+const val FILTRO_TODOS = "Todos"
+const val FILTRO_SUGERIDOS = "Sugeridos"
+const val FILTRO_METAS = "Solo metas"
 
 data class ProductsUiState(
     val isLoading: Boolean = true,
     val orderStatus: OrderStatus = OrderStatus.IDLE,
     val errorMessage: String? = null,
-
-    // Datos crudos
+    val stop: RouteStop? = null,
     val rawProducts: List<Product> = emptyList(),
     val rawTargets: List<CampaignTarget> = emptyList(),
-
-    // Datos procesados para la vista
+    val suggested: SuggestedOrder? = null,
     val displayedProducts: List<ProductUiModel> = emptyList(),
-
-    // Filtros
     val searchQuery: String = "",
-    val showOnlyTargets: Boolean = false, // Reemplaza a las categorías hardcodeadas
-
+    val filtro: String = FILTRO_TODOS,
     val selectedTab: ProductTab = ProductTab.CATALOG,
-    val cart: Map<Int, Int> = emptyMap() // Map<ProductID, Quantity> (Usamos Int ID, no String Code)
+    val cart: Map<Int, Int> = emptyMap()
 ) {
     val cartItemCount: Int get() = cart.values.sum()
-
-    val cartTotal: Double get() = cart.entries.sumOf { (productId, quantity) ->
-        (rawProducts.find { it.id == productId }?.price ?: 0.0) * quantity
+    val cartTotal: Double get() = cart.entries.sumOf { (id, q) -> (rawProducts.find { it.id == id }?.price ?: 0.0) * q }
+    val cartList: List<Pair<ProductUiModel, Int>> get() = cart.mapNotNull { (id, q) ->
+        rawProducts.find { it.id == id }?.let { p -> modelo(p) to q }
     }
+    val categorias: List<String> get() = rawProducts.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
+    val filtros: List<String> get() = listOf(FILTRO_TODOS, FILTRO_SUGERIDOS, FILTRO_METAS) + categorias
 
-    // Lista para mostrar en el resumen del pedido
-    val cartList: List<Pair<ProductUiModel, Int>> get() = cart.mapNotNull { (productId, quantity) ->
-        val product = rawProducts.find { it.id == productId }
-        val target = rawTargets.find { it.productId == productId }
-        if (product != null) {
-            ProductUiModel(product, target) to quantity
-        } else null
-    }
+    fun modelo(p: Product) = ProductUiModel(p, rawTargets.find { it.productId == p.id },
+        suggested?.items?.find { it.productId == p.id })
 }
 
 @HiltViewModel
 class ProductsViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
     private val syncCatalogUseCase: SyncCatalogUseCase,
     private val getCatalogUseCase: GetCatalogUseCase,
     private val syncCampaignsUseCase: SyncCampaignsUseCase,
     private val getCampaignsUseCase: GetCampaignsUseCase,
-    private val submitOrderUseCase: SubmitOrderUseCase
+    private val submitOrderUseCase: SubmitOrderUseCase,
+    private val salesRepository: SalesRepository,
+    private val routeRepository: RouteRepository
 ) : ViewModel() {
-
-    private var currentRouteLineId: Int? = null
 
     private val _uiState = MutableStateFlow(ProductsUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
-        // Cargamos catálogo y campañas apenas se crea el ViewModel
-        // (No dependen del cliente específico, sino del vendedor)
-        loadGeneralData()
-    }
-
-    // --- NUEVA FUNCIÓN: Recibe el ID desde la UI ---
-    fun setRouteLineId(id: Int) {
-        if (currentRouteLineId != id) {
-            currentRouteLineId = id
-            // Opcional: Si quisieras cargar precios específicos por cliente, lo harías aquí.
-            // Por ahora solo guardamos el ID para usarlo al enviar el pedido.
-        }
-    }
-
-    private fun loadGeneralData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-
-            // 1. Sincronizar
             launch { syncCatalogUseCase() }
             launch { syncCampaignsUseCase() }
-
-            // 2. Observar datos locales
-            combine(
-                getCatalogUseCase(),
-                getCampaignsUseCase()
-            ) { products, campaigns ->
-                val allTargets = campaigns.flatMap { it.targets }
-                Pair(products, allTargets)
+            combine(getCatalogUseCase(), getCampaignsUseCase()) { products, campaigns ->
+                products to campaigns.flatMap { it.targets }
             }.collect { (products, targets) ->
-                _uiState.update { state ->
-                    state.copy(
-                        isLoading = false,
-                        rawProducts = products,
-                        rawTargets = targets
-                    )
-                }
+                _uiState.update { it.copy(isLoading = false, rawProducts = products, rawTargets = targets) }
                 applyFilters()
             }
         }
     }
 
-    private fun loadData() {
+    /** Visita en curso: el pedido queda ligado a ella y se carga el pedido sugerido del cliente (sin conexión). */
+    fun setStop(stop: RouteStop) {
+        if (_uiState.value.stop?.id == stop.id) return
+        _uiState.update { it.copy(stop = stop, cart = emptyMap(), suggested = null, filtro = FILTRO_TODOS) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-
-            // 1. Disparar sincronización en segundo plano (API -> Local)
-            launch { syncCatalogUseCase() }
-            launch { syncCampaignsUseCase() }
-
-            // 2. Observar base de datos local (Local -> UI)
-            // Combinamos Productos y Campañas para saber qué productos tienen meta
-            combine(
-                getCatalogUseCase(),
-                getCampaignsUseCase()
-            ) { products, campaigns ->
-                // Aplanamos todos los targets de todas las campañas activas
-                val allTargets = campaigns.flatMap { it.targets }
-                Pair(products, allTargets)
-            }.collect { (products, targets) ->
-                _uiState.update { state ->
-                    state.copy(
-                        isLoading = false,
-                        rawProducts = products,
-                        rawTargets = targets
-                    )
-                }
-                applyFilters()
+            var sug = salesRepository.getSuggested(stop.partnerId)
+            if (sug == null && stop.partnerId > 0) {
+                salesRepository.syncSuggested(listOf(stop.partnerId))
+                sug = salesRepository.getSuggested(stop.partnerId)
             }
+            _uiState.update { it.copy(suggested = sug) }
+            applyFilters()
         }
     }
 
-    fun onSearchQueryChanged(query: String) {
-        _uiState.update { it.copy(searchQuery = query) }
-        applyFilters()
-    }
+    fun onSearchQueryChanged(query: String) { _uiState.update { it.copy(searchQuery = query) }; applyFilters() }
 
-    fun onToggleTargetsFilter(showOnlyTargets: Boolean) {
-        _uiState.update { it.copy(showOnlyTargets = showOnlyTargets) }
-        applyFilters()
-    }
+    fun onFiltro(f: String) { _uiState.update { it.copy(filtro = f) }; applyFilters() }
 
-    fun onTabSelected(tab: ProductTab) {
-        _uiState.update { it.copy(selectedTab = tab) }
-    }
+    fun onTabSelected(tab: ProductTab) = _uiState.update { it.copy(selectedTab = tab) }
 
     fun onQuantityChanged(productId: Int, change: Int) {
-        val currentCart = _uiState.value.cart.toMutableMap()
-        val currentQuantity = currentCart[productId] ?: 0
-        val newQuantity = currentQuantity + change
+        val cart = _uiState.value.cart.toMutableMap()
+        val q = (cart[productId] ?: 0) + change
+        if (q > 0) cart[productId] = q else cart.remove(productId)
+        _uiState.update { it.copy(cart = cart) }
+    }
 
-        if (newQuantity > 0) {
-            currentCart[productId] = newQuantity
-        } else {
-            currentCart.remove(productId)
-        }
-        _uiState.update { it.copy(cart = currentCart) }
+    /** "Agregar todo": pone en el pedido las cantidades sugeridas (sin bajar las que ya puso el vendedor). */
+    fun onAgregarSugerido() {
+        val sug = _uiState.value.suggested ?: return
+        val disponibles = _uiState.value.rawProducts.map { it.id }.toSet()
+        val cart = _uiState.value.cart.toMutableMap()
+        sug.items.filter { it.productId in disponibles }.forEach { cart[it.productId] = maxOf(cart[it.productId] ?: 0, it.qty) }
+        _uiState.update { it.copy(cart = cart, selectedTab = ProductTab.ORDER) }
     }
 
     fun onProcessOrder() {
-        val visitId = currentRouteLineId
-        if (_uiState.value.cart.isEmpty() || visitId == null) {
-            _uiState.update { it.copy(errorMessage = "Error: No hay visita activa identificada.") }
+        val s = _uiState.value
+        val stop = s.stop
+        if (s.cart.isEmpty() || stop == null) {
+            _uiState.update { it.copy(orderStatus = OrderStatus.ERROR, errorMessage = "No hay una visita en curso.") }
             return
         }
-
         viewModelScope.launch {
-            _uiState.update { it.copy(orderStatus = OrderStatus.PROCESSING) }
-
-            val items = _uiState.value.cart.map { (id, qty) ->
-                OrderItem(productId = id, quantity = qty.toDouble())
-            }
-
-            // Usamos el ID que nos pasaron
-            val result = submitOrderUseCase(visitId, items)
-
-            when (result) {
-                is Resource.Success -> {
-                    _uiState.update {
-                        it.copy(orderStatus = OrderStatus.SUCCESS, cart = emptyMap())
-                    }
-                    syncCampaignsUseCase()
-                }
-                is Resource.Error -> {
-                    _uiState.update {
-                        it.copy(orderStatus = OrderStatus.ERROR, errorMessage = result.message)
-                    }
-                }
-                else -> {}
-            }
+            val total = s.cartTotal
+            submitOrderUseCase(stop.id, stop.partnerName, s.cart.map { (id, q) -> OrderItem(id, q.toDouble()) }, total)
+            routeRepository.sumarVentaLocal(stop.id, total)
+            _uiState.update { it.copy(orderStatus = OrderStatus.SUCCESS, cart = emptyMap()) }
         }
     }
 
-    fun resetOrderStatus() {
-        _uiState.update { it.copy(orderStatus = OrderStatus.IDLE, errorMessage = null) }
-    }
+    fun resetOrderStatus() = _uiState.update { it.copy(orderStatus = OrderStatus.IDLE, errorMessage = null) }
 
     private fun applyFilters() {
-        val state = _uiState.value
-
-        val filtered = state.rawProducts.mapNotNull { product ->
-            // Buscamos si este producto tiene una meta activa
-            val target = state.rawTargets.find { it.productId == product.id }
-
-            // Filtro 1: Texto
-            val matchesSearch = state.searchQuery.isBlank() ||
-                    product.name.contains(state.searchQuery, ignoreCase = true) ||
-                    product.code.contains(state.searchQuery, ignoreCase = true)
-
-            // Filtro 2: Solo metas
-            val matchesTarget = if (state.showOnlyTargets) target != null else true
-
-            if (matchesSearch && matchesTarget) {
-                ProductUiModel(product, target)
-            } else {
-                null
+        val s = _uiState.value
+        val lista = s.rawProducts.map { s.modelo(it) }.filter { m ->
+            val texto = s.searchQuery.isBlank() || m.product.name.contains(s.searchQuery, true) ||
+                m.product.code.contains(s.searchQuery, true)
+            val filtro = when (s.filtro) {
+                FILTRO_TODOS -> true
+                FILTRO_SUGERIDOS -> m.suggestion != null
+                FILTRO_METAS -> m.targetInfo != null
+                else -> m.product.category == s.filtro
             }
-        }
-
-        _uiState.update { it.copy(displayedProducts = filtered) }
+            texto && filtro
+        }.sortedWith(compareBy({ it.suggestion == null }, { it.targetInfo == null }, { it.product.name }))
+        _uiState.update { it.copy(displayedProducts = lista) }
     }
 }

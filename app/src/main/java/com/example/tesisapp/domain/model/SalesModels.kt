@@ -6,8 +6,20 @@ data class Product(
     val code: String,
     val price: Double,
     val uomName: String,
-    val imageUrl: String
+    val imageUrl: String,
+    val category: String = ""
 )
+
+/** Producto del pedido sugerido (línea base; en la F5 lo produce el modelo de ML). */
+data class SuggestedItem(
+    val productId: Int,
+    val name: String,
+    val qty: Int,
+    val reason: String,
+    val campaign: Boolean
+)
+
+data class SuggestedOrder(val items: List<SuggestedItem>, val avgTicket: Double)
 
 data class Campaign(
     val id: Int,

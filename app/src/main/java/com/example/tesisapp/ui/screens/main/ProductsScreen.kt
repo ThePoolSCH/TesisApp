@@ -1,5 +1,12 @@
 package com.example.tesisapp.ui.screens.main
 
+import androidx.compose.foundation.lazy.LazyRow
+import com.example.tesisapp.domain.model.RouteStop
+import com.example.tesisapp.domain.model.SuggestedOrder
+import com.example.tesisapp.ui.theme.TesisColors
+import com.example.tesisapp.ui.theme.TesisShapes
+import com.example.tesisapp.utils.Formato
+
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -33,15 +40,11 @@ import com.example.tesisapp.ui.components.ProductCard
 
 @Composable
 fun ProductsScreen(
-    viewModel: ProductsViewModel = hiltViewModel(),
-    activeRouteLineId: Int?
+    activeStop: RouteStop?,
+    viewModel: ProductsViewModel = hiltViewModel()
 ) {
-    // Pasar ID al ViewModel
-    LaunchedEffect(activeRouteLineId) {
-        if (activeRouteLineId != null) {
-            viewModel.setRouteLineId(activeRouteLineId)
-        }
-    }
+    // La visita en curso: el pedido queda ligado a ella y se carga su pedido sugerido
+    LaunchedEffect(activeStop?.id) { activeStop?.let(viewModel::setStop) }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -49,7 +52,7 @@ fun ProductsScreen(
     // Manejo de Toasts
     LaunchedEffect(uiState.orderStatus) {
         if (uiState.orderStatus == OrderStatus.SUCCESS) {
-            Toast.makeText(context, "Pedido enviado correctamente", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Pedido guardado. Se enviará a Odoo en cuanto haya conexión.", Toast.LENGTH_LONG).show()
             viewModel.resetOrderStatus()
             viewModel.onTabSelected(ProductTab.CATALOG)
         } else if (uiState.orderStatus == OrderStatus.ERROR) {
@@ -61,7 +64,7 @@ fun ProductsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FA)) // Fondo general gris muy suave
+            .background(TesisColors.Fondo) // Fondo general gris muy suave
             .padding(16.dp)
     ) {
 
@@ -86,22 +89,6 @@ fun ProductsScreen(
             }
         }
 
-        // Loader Full Screen
-        if (uiState.orderStatus == OrderStatus.PROCESSING) {
-            AlertDialog(
-                onDismissRequest = {},
-                containerColor = Color.White,
-                title = { Text("Procesando", color = Color.Black) },
-                text = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("Enviando a Odoo...", color = Color.Black)
-                    }
-                },
-                confirmButton = {}
-            )
-        }
     }
 }
 
@@ -118,7 +105,7 @@ fun CustomSegmentedTab(
             .fillMaxWidth()
             .height(54.dp)
             .clip(RoundedCornerShape(50)) // Forma de píldora completa
-            .background(Color(0xFFEEF0F2)) // Gris claro similar a la imagen
+            .background(TesisColors.Gris200) // Gris claro similar a la imagen
             .padding(4.dp), // Espacio interno para que el seleccionado "flote"
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -238,22 +225,11 @@ private fun CatalogContent(uiState: ProductsUiState, viewModel: ProductsViewMode
             singleLine = true
         )
 
-        // Filtros
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilterButton(
-                text = "Todos",
-                isSelected = !uiState.showOnlyTargets,
-                onClick = { viewModel.onToggleTargetsFilter(false) }
-            )
-
-            FilterButton(
-                text = "Solo Metas",
-                isSelected = uiState.showOnlyTargets,
-                onClick = { viewModel.onToggleTargetsFilter(true) }
-            )
+        // Filtros (mockup A4): Todos / Sugeridos / Solo metas / categorías
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(uiState.filtros) { f ->
+                FilterButton(text = f, isSelected = uiState.filtro == f, onClick = { viewModel.onFiltro(f) })
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -262,6 +238,10 @@ private fun CatalogContent(uiState: ProductsUiState, viewModel: ProductsViewMode
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
+            val sug = uiState.suggested
+            if (sug != null && sug.items.isNotEmpty() && uiState.filtro == FILTRO_TODOS && uiState.searchQuery.isBlank()) {
+                item { SugeridoCard(sug, uiState.stop?.partnerName.orEmpty(), viewModel::onAgregarSugerido) }
+            }
             items(uiState.displayedProducts, key = { it.product.id }) { item ->
                 ProductCard(
                     productModel = item,
@@ -282,7 +262,7 @@ fun FilterButton(text: String, isSelected: Boolean, onClick: () -> Unit) {
             containerColor = if (isSelected) Color.Black else Color.White,
             contentColor = if (isSelected) Color.White else Color.Black
         ),
-        border = if (!isSelected) BorderStroke(1.dp, Color(0xFFE0E0E0)) else null,
+        border = if (!isSelected) BorderStroke(1.dp, TesisColors.Gris300) else null,
         elevation = ButtonDefaults.buttonElevation(0.dp),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         modifier = Modifier.height(36.dp)
@@ -301,7 +281,7 @@ private fun OrderContent(uiState: ProductsUiState, viewModel: ProductsViewModel)
             colors = CardDefaults.cardColors(containerColor = Color.White),
             shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.cardElevation(0.dp),
-            border = BorderStroke(1.dp, Color(0xFFEEEEEE))
+            border = BorderStroke(1.dp, TesisColors.Gris200)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Resumen del Pedido", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -310,16 +290,27 @@ private fun OrderContent(uiState: ProductsUiState, viewModel: ProductsViewModel)
                     Text("Total de artículos:", color = Color.Gray)
                     Text("${uiState.cartItemCount}", fontWeight = FontWeight.Bold)
                 }
-                Divider(modifier = Modifier.padding(vertical = 12.dp), color = Color(0xFFEEEEEE))
+                Divider(modifier = Modifier.padding(vertical = 12.dp), color = TesisColors.Gris200)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Total a Pagar:", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        text = "$ ${String.format("%.2f", uiState.cartTotal)}",
+                        text = Formato.pen(uiState.cartTotal),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.Black
                     )
                 }
+                val ticket = uiState.suggested?.avgTicket ?: 0.0
+                if (ticket > 0 && uiState.cartTotal > 0) {
+                    val dif = (uiState.cartTotal / ticket - 1) * 100
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Ticket medio del cliente: ${Formato.pen(ticket)} · este pedido ${if (dif >= 0) "+" else ""}${Formato.pct(dif)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (dif >= 0) TesisColors.Ok else TesisColors.Texto2
+                    )
+                }
+                Text("Precios sin IGV", style = MaterialTheme.typography.labelSmall, color = TesisColors.Texto2)
             }
         }
 
@@ -358,7 +349,38 @@ private fun OrderContent(uiState: ProductsUiState, viewModel: ProductsViewModel)
                 disabledContainerColor = Color.Gray
             )
         ) {
-            Text("Confirmar y Enviar", fontSize = androidx.compose.ui.unit.TextUnit.Unspecified)
+            Text("Confirmar pedido", fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/** Bloque negro "Pedido sugerido" (mockup A4): qué suele comprar el cliente y por qué; "Agregar todo". */
+@Composable
+private fun SugeridoCard(sug: SuggestedOrder, cliente: String, onAgregarTodo: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = TesisColors.Negro, contentColor = TesisColors.Blanco)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Pedido sugerido", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Lo que $cliente suele comprar", style = MaterialTheme.typography.bodySmall, color = TesisColors.Gris400)
+            Spacer(Modifier.height(10.dp))
+            sug.items.take(6).forEach { it ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${it.qty} ×", fontWeight = FontWeight.Bold, modifier = Modifier.width(40.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(it.name, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(if (it.campaign) "${it.reason} · meta de campaña" else it.reason,
+                            style = MaterialTheme.typography.labelSmall, color = TesisColors.Gris400)
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = onAgregarTodo, modifier = Modifier.fillMaxWidth().height(44.dp), shape = TesisShapes.M,
+                colors = ButtonDefaults.buttonColors(containerColor = TesisColors.Blanco, contentColor = TesisColors.Negro)
+            ) { Text("Agregar todo", fontWeight = FontWeight.Bold) }
         }
     }
 }

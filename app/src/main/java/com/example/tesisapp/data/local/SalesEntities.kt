@@ -14,7 +14,8 @@ data class ProductEntity(
     val code: String,
     val price: Double,
     val uomName: String,
-    val imageUrl: String
+    val imageUrl: String,
+    val category: String = ""
 )
 
 @Entity(tableName = "campaigns")

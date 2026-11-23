@@ -21,6 +21,6 @@ class GetCampaignsUseCase @Inject constructor(private val repo: SalesRepository)
 }
 
 class SubmitOrderUseCase @Inject constructor(private val repo: SalesRepository) {
-    suspend operator fun invoke(routeLineId: Int, items: List<OrderItem>) =
-        repo.createOrder(routeLineId, items)
+    suspend operator fun invoke(routeLineId: Int, partnerName: String, items: List<OrderItem>, total: Double) =
+        repo.createOrder(routeLineId, partnerName, items, total)
 }
