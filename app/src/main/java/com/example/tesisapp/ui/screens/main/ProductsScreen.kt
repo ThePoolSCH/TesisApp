@@ -364,7 +364,12 @@ private fun SugeridoCard(sug: SuggestedOrder, cliente: String, onAgregarTodo: ()
     ) {
         Column(Modifier.padding(16.dp)) {
             Text("Pedido sugerido", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("Lo que $cliente suele comprar", style = MaterialTheme.typography.bodySmall, color = TesisColors.Gris400)
+            Text(if (sug.method == "ml") "Calculado con el modelo de compras de $cliente" else "Lo que $cliente suele comprar",
+                style = MaterialTheme.typography.bodySmall, color = TesisColors.Gris400)
+            sug.expectedTicket?.let {
+                Text("Pedido estimado: ${Formato.pen(it, 0)} (sin IGV)", style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+            }
             Spacer(Modifier.height(10.dp))
             sug.items.take(6).forEach { it ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -167,7 +167,8 @@ class SalesRepositoryImpl(
                 val filas = r.data?.takeIf { it.isJsonArray }?.asJsonArray ?: return Resource.Success(Unit)
                 cola.upsertSuggested(filas.map { e ->
                     val o = e.asJsonObject
-                    SuggestedEntity(o.get("partner_id").asInt, o.get("items").toString(), o.get("avg_ticket")?.asDouble ?: 0.0)
+                    // F5: se guarda el objeto completo (ítems, método y monto esperado) sin cambiar el esquema de Room
+                    SuggestedEntity(o.get("partner_id").asInt, o.toString(), o.get("avg_ticket")?.asDouble ?: 0.0)
                 })
                 Resource.Success(Unit)
             }
@@ -179,13 +180,9 @@ class SalesRepositoryImpl(
 
     override suspend fun getSuggested(partnerId: Int): SuggestedOrder? {
         val e = cola.suggested(partnerId) ?: return null
-        val items = JsonParser.parseString(e.itemsJson).asJsonArray.map { x ->
-            val o = x.asJsonObject
-            SuggestedItem(o.get("product_id").asInt, o.get("name").asString, o.get("qty").asInt,
-                o.get("reason").asString, o.get("campaign")?.asBoolean ?: false)
-        }
-        return SuggestedOrder(items, e.avgTicket)
+        return parsearSugerido(e.itemsJson, e.avgTicket)
     }
+
 
     private fun resolveAssetUrl(raw: String): String {
         if (raw.isBlank()) {

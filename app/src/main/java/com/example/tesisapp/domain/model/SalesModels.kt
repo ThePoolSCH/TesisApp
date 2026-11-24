@@ -16,10 +16,18 @@ data class SuggestedItem(
     val name: String,
     val qty: Int,
     val reason: String,
-    val campaign: Boolean
+    val campaign: Boolean,
+    val probability: Double? = null // F5: solo cuando lo calculó el modelo de ML
 )
 
-data class SuggestedOrder(val items: List<SuggestedItem>, val avgTicket: Double)
+/** `method`: "ml" (modelo publicado en lote, F5) o "regla" (frecuencia en los últimos 8 pedidos).
+ *  `expectedTicket`: monto esperado del próximo pedido según el ML (null con la regla). */
+data class SuggestedOrder(
+    val items: List<SuggestedItem>,
+    val avgTicket: Double,
+    val method: String = "regla",
+    val expectedTicket: Double? = null
+)
 
 data class Campaign(
     val id: Int,
